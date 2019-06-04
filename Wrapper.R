@@ -40,21 +40,9 @@ df_samp_cls$response<-temp_tarc
 #--------------------------------------------------------
 
 #-----------Model Training and Testing-------------------
-modeltest<- function(mod, typeM){
+modeltest<- function(df_tune, typeM, wrap){
   
   if(typeM == 'R'){#Regression
-    
-    #Extract the features
-    sfeats = getFeatSelResult(mod)
-    
-    cols<-sfeats$x
-    cols<-c(cols,"response")
-    #print(cols)
-    
-    #dataframe with selected features
-    df_tune<-df_samp_reg
-    df_tune<-df_tune[, names(df_tune) %in% cols] 
-    #ncol(df_tune)
     
     regr.task_mod<-makeRegrTask( data = data.frame(df_tune), target = "response")
     n1 = getTaskSize(regr.task_mod)
@@ -71,32 +59,12 @@ modeltest<- function(mod, typeM){
     task.pred
     res<-performance(task.pred, measures = mse)
     
-    #Capturing best values of hyperparameter after tuning
-    df_val<-data.frame(Name=character(), Value=character())
     
-    nwln<- list(Name= "No. of Features", Value = ncol(df_tune))
-    df_val = rbind(df_val,nwln, stringsAsFactors=FALSE)
-    
-    nwln<- list(Name= "mse", Value = res)
-    df_val = rbind(df_val,nwln, stringsAsFactors=FALSE)
-    
-    return(df_val)
+    return(round(res,digits = 3))
     
   }
   
   if(typeM == 'C'){#Classification
-    
-    #Extract the features
-    sfeats = getFeatSelResult(mod)
-    
-    cols<-sfeats$x
-    cols<-c(cols,"response")
-    #print(cols)
-    
-    #dataframe with selected features
-    df_tune<-df_samp_cls
-    df_tune<-df_tune[, names(df_tune) %in% cols] 
-    #ncol(df_tune)
     
     clsf.task_mod<-makeClassifTask( data = data.frame(df_tune), target = "response")
     n2 = getTaskSize(clsf.task_mod)
@@ -112,19 +80,7 @@ modeltest<- function(mod, typeM){
     task.pred
     res<-performance(task.pred, measures = acc)
     
-    #r = calculateROCMeasures(task.pred)
-    #res<- list(res, r)
-    
-    #Capturing best values of hyperparameter after tuning
-    df_val<-data.frame(Name=character(), Value=character())
-    
-    nwln<- list(Name= "No. of Features", Value = ncol(df_tune))
-    df_val = rbind(df_val,nwln, stringsAsFactors=FALSE)
-    
-    nwln<- list(Name= "Accuracy", Value = res)
-    df_val = rbind(df_val,nwln, stringsAsFactors=FALSE)
-    
-    return(df_val)
+    return(round(res,digits = 3))
     
   }
 }
@@ -144,11 +100,15 @@ cv.folds <- makeResampleDesc("CV", iters = 3)
 # Define model tuning algorithm ~ Random tune algorithm
 random.tune <- makeTuneControlRandom(maxit = 5)
 
-#Classification:Task Creation
+  #Classification:Task Creation
 clsf.task<-makeClassifTask(id     = "Tin_clsf", 
                            data   = data.frame(df_samp_cls), 
                            target = "response")
 getTaskFeatureNames(clsf.task)
+
+ctrl = makeTuneControlGrid()
+inner = makeResampleDesc("Holdout")
+outer = makeResampleDesc("CV", iters = 3)
 #--------------------------------------------------------
 
 #----------W:1.makeFeatSelControlRandom-----------------
@@ -161,55 +121,223 @@ control1<-makeFeatSelControlRandom(same.resampling.instance = TRUE,
 
 #---------1.1 R:K-Nearest-Neighbor regressiong-----------
 
-#Defining learner model
-lrn_wr1<- makeFeatSelWrapper(learner    = "regr.kknn", 
+#Tuning hyperparameters
+lrnr<-makeLearner("regr.kknn")
+#Get parameter set of the learner
+getParamSet(lrnr)
+ps <- makeParamSet(makeIntegerParam("k",       lower = 1, upper = 10),
+                   makeNumericParam("distance",lower = 1, upper = 10)
+)
+lrnr = makeTuneWrapper(lrnr, resampling = inner, par.set = ps, control = ctrl)
+modw = train(lrnr, regr.task)
+print(getTuneResult(modw))
+r = resample(lrnr, regr.task, outer, extract = getTuneResult)
+print(r$extract)
+
+#using the yuned parameters to make the learner
+lrnr<-makeLearner("regr.kknn",
+                  par.vals = list(k=10, distance=1))
+
+#Defining learner model in the wrapper method
+lrn_wr1<- makeFeatSelWrapper(learner    = lrnr, 
                              resampling = cv.folds,
                              control    = control1, 
                              show.info  = FALSE)
 
-
 #Training of model to extract features
 mod_wr1 = mlr::train(lrn_wr1, task = regr.task)
 
+#Extract the features
+sfeats = getFeatSelResult(mod_wr1)
+
+cols<-sfeats$x
+cols<-c(cols,"response")
+#print(cols)
+
+#dataframe with selected features
+df_tune_w1r1<-df_samp_reg
+df_tune_w1r1<-df_tune_w1r1[, names(df_tune_w1r1) %in% cols] 
+ncol(df_tune_w1r1)
+
 #Getting Accuracy ~ Model training & Testing with subset of features
-res_w1r1<-modeltest(mod_wr1, 'R')
+res_w1r1<-modeltest(df_tune_w1r1, 'R')
 print(res_w1r1)
+
+#Capturing best values of hyperparameter after tuning
+df_val_w1r1<-data.frame(Observation=character(), Value=character())
+
+nwln<- list(Observation= "No. of Features", Value = (ncol(df_tune_w1r1)-1))
+df_val_w1r1 = rbind(df_val_w1r1,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Observation= "k", Value = 10)
+df_val_w1r1 = rbind(df_val_w1r1,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Observation= "distance", Value = 1)
+df_val_w1r1 = rbind(df_val_w1r1,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Observation= "mse", Value = res_w1r1)
+df_val_w1r1 = rbind(df_val_w1r1,nwln, stringsAsFactors=FALSE)
+
+print(df_val_w1r1)
 
 #---------End of Nearest-Neighbor regressiong------------
 
 #---------1.2 R:Conditional Inference Trees--------------
 
+#Tuning hyperparameters
+lrnr<-makeLearner("regr.ctree")
+#Get parameter set of the learner
+getParamSet(lrnr)
+ps <- makeParamSet(makeDiscreteParam("teststat",    values = c("quad","max")),
+                   makeNumericParam("mincriterion", lower = 0, upper = 1),
+                   makeIntegerParam("minsplit",     lower = 1, upper = 50), #remove cmt for org data
+                   makeIntegerParam("minbucket",    lower = 1, upper = 10)
+                   #makeIntegerParam("maxsurrogate", lower = 0, upper = 10)
+                   #makeIntegerParam("mtry",         lower = 0, upper = 5)
+                   #makeIntegerParam("maxdepth",     lower = 0, upper = 10)
+)
+lrnr = makeTuneWrapper(lrnr, resampling = inner, par.set = ps, control = ctrl)
+modw = train(lrnr, regr.task)
+print(getTuneResult(modw))
+r = resample(lrnr, regr.task, outer, extract = getTuneResult)
+print(r$extract)
+
+#using the yuned parameters to make the learner
+lrnr<-makeLearner("regr.ctree",
+                  par.vals = list(teststat=10, 
+                                  mincriterion=1,
+                                  minsplit=2,
+                                  minbucket=1))
+
 #Defining learner model
-lrn_wr2<- makeFeatSelWrapper(learner    = "regr.ctree", 
+lrn_w1r2<- makeFeatSelWrapper(learner    = lrnr, 
                              resampling = cv.folds,
                              control    = control1, 
                              show.info  = FALSE)
 
 
 #Training of model to extract features
-mod_wr2 = mlr::train(lrn_wr2, task = regr.task)
+mod_w1r2 = mlr::train(lrn_w1r2, task = regr.task)
+
+#Extract the features
+sfeats = getFeatSelResult(mod_w1r2)
+
+cols<-sfeats$x
+cols<-c(cols,"response")
+#print(cols)
+
+#dataframe with selected features
+df_tune_w1r2<-df_samp_reg
+df_tune_w1r2<-df_tune_w1r2[, names(df_tune_w1r2) %in% cols] 
+ncol(df_tune_w1r2)
 
 #Getting Accuracy ~ Model training & Testing with subset of features
-res_w1r2<-modeltest(mod_wr2, 'R')
+res_w1r2<-modeltest(df_tune_w1r2, 'R')
 print(res_w1r2)
+
+#Capturing best values of hyperparameter after tuning
+df_val_w1r2<-data.frame(Observation=character(), Value=character())
+
+nwln<- list(Observation= "No. of Features", Value = (ncol(df_tune_w1r2)-1))
+df_val_w1r2 = rbind(df_val_w1r2,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Observation= "teststat", Value = tuned.model_r2$x$teststat)
+df_val_w1r2 = rbind(df_val_w1r2,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Observation= "mincriterion", Value = tuned.model_r2$x$mincriterion)
+df_val_w1r2 = rbind(df_val_w1r2,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Observation= "minsplit", Value = tuned.model_r2$x$minsplit)
+df_val_w1r2 = rbind(df_val_w1r2,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Observation= "minbucket", Value = tuned.model_r2$x$minbucket)
+df_val_w1r2 = rbind(df_val_w1r2,nwln, stringsAsFactors=FALSE)
+
+#nwln<- list(Observation= "maxsurrogate", Value = tuned.model_r2$x$maxsurrogate)
+#df_val_w1r2 = rbind(df_val_w1r2,nwln, stringsAsFactors=FALSE)
+
+#nwln<- list(Observation= "mtry", Value = tuned.model_r2$x$mtry)
+#df_val_w1r2 = rbind(df_val_w1r2,nwln, stringsAsFactors=FALSE)
+
+#nwln<- list(Observation= "maxdepth", Value = tuned.model_r2$x$maxdepth)
+#df_val_w1r2 = rbind(df_val_w1r2,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Observation= "mse", Value = res_w1r2)
+df_val_w1r2 = rbind(df_val_w1r2,nwln, stringsAsFactors=FALSE)
+
+print(df_val_w1r2)
 
 #---------End of Conditional Inference Trees------------
 
 #---------1.3 R:Bayesian CART---------------------------
 
+#Tuning hyperparameters
+lrnr<-makeLearner("regr.bcart")
+#Get parameter set of the learner
+getParamSet(lrnr)
+ps <- makeParamSet(makeDiscreteParam("bprior",values = c("b0","b0not","bflat","bmle","bmznot","bmzt")),
+                   makeIntegerParam("R",      lower = 1, upper = 10),
+                   makeIntegerParam("verb",   lower = 0, upper = 4)
+)
+lrnr = makeTuneWrapper(lrnr, resampling = inner, par.set = ps, control = ctrl)
+modw = train(lrnr, regr.task)
+print(getTuneResult(modw))
+r = resample(lrnr, regr.task, outer, extract = getTuneResult)
+print(r$extract)
+
+#using the yuned parameters to make the learner
+lrnr<-makeLearner("regr.bcart",
+                  par.vals = list(bprior=10, 
+                                  R=1,
+                                  verb=2))
+
+
 #Defining learner model
-lrn_wr3<- makeFeatSelWrapper(learner    = "regr.bcart", 
+lrn_w1r3<- makeFeatSelWrapper(learner    = "regr.bcart", 
                              resampling = cv.folds,
                              control    = control1, 
                              show.info  = FALSE)
 
 
 #Training of model to extract features
-mod_wr3 = mlr::train(lrn_wr3, task = regr.task)
+mod_w1r3 = mlr::train(lrn_w1r3, task = regr.task)
+
+#Extract the features
+sfeats = getFeatSelResult(mod_w1r3)
+
+cols<-sfeats$x
+cols<-c(cols,"response")
+#print(cols)
+
+#dataframe with selected features
+df_tune_w1r3<-df_samp_reg
+df_tune_w1r3<-df_tune_w1r3[, names(df_tune_w1r3) %in% cols] 
+ncol(df_tune_w1r3)
 
 #Getting Accuracy ~ Model training & Testing with subset of features
-res_w1r3<-modeltest(mod_wr3, 'R')
+res_w1r3<-modeltest(df_tune_w1r3, 'R')
 print(res_w1r3)
+
+#Capturing best values of hyperparameter after tuning
+df_val_w1r3<-data.frame(Observation=character(), Value=character())
+
+nwln<- list(Hyperparameter= "No. of Features", Value = (ncol(df_tune_w1r3)-1))
+df_val_w1r3 = rbind(df_val_w1r3,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Hyperparameter= "bprior", Value = tuned.model_r3$x$bprior)
+df_val_w1r3 = rbind(df_val_w1r3,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Hyperparameter= "R", Value = tuned.model_r3$x$R)
+df_val_w1r3 = rbind(df_val_w1r3,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Hyperparameter= "verb", Value = tuned.model_r3$x$verb)
+df_val_w1r3 = rbind(df_val_w1r3,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Hyperparameter= "mse", Value = res_r3)
+df_val_w1r3 = rbind(df_val_w1r3,nwln, stringsAsFactors=FALSE)
+
+
+print(df_val_w1r3)
 
 #---------End of Bayesian CART---------------------------
 
@@ -217,56 +345,198 @@ print(res_w1r3)
 #---------------
 
 #---------2.1 C:Binomial Regression----------------------
+#Tuning hyperparameters
+lrnr<-makeLearner("classif.binomial")
+#Get parameter set of the learner
+getParamSet(lrnr)
+ps <- makeParamSet(makeDiscreteParam("link",values = c("logit","probit","cloglog","cauchit","log"))
+)
+lrnr = makeTuneWrapper(lrnr, resampling = inner, par.set = ps, control = ctrl)
+modw = train(lrnr, clsf.task)
+print(getTuneResult(modw))
+r = resample(lrnr, clsf.task, outer, extract = getTuneResult)
+print(r$extract)
+
+#using the yuned parameters to make the learner
+lrnr<-makeLearner("classif.binomial",
+                  par.vals = list(link=10))
+
 
 #Defining learner model
-lrn_wc1<- makeFeatSelWrapper(learner    = "classif.binomial", 
+lrn_w1c1<- makeFeatSelWrapper(learner    = lrnr, 
                              resampling = cv.folds,
                              control    = control1, 
                              show.info  = FALSE)
 
 
 #Training of model to extract features
-mod_wc1 = mlr::train(lrn_wc1, task = clsf.task)
+mod_w1c1 = mlr::train(lrn_w1c1, task = clsf.task)
+
+#Extract the features
+sfeats = getFeatSelResult(mod_w1c1)
+
+cols<-sfeats$x
+cols<-c(cols,"response")
+#print(cols)
+
+#dataframe with selected features
+df_tune_w1c1<-df_samp_cls
+df_tune_w1c1<-df_tune_w1c1[, names(df_tune_w1c1) %in% cols] 
+ncol(df_tune_w1c1)
 
 #Getting Accuracy ~ Model training & Testing with subset of features
-res_w1c1<-modeltest(mod_wc1, 'C')
+res_w1c1<-modeltest(df_tune_w1c1, 'C')
 print(res_w1c1)
+
+#Capturing best values of hyperparameter after tuning
+df_val_w1c1<-data.frame(Observation=character(), Value=character())
+
+nwln<- list(Observation= "No. of Features", Value = (ncol(df_tune_w1c1)-1))
+df_val_w1c1 = rbind(df_val_w1c1,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Observation= "link", Value = tuned.model_c1$x$link)
+df_val_w1c1 = rbind(df_val_w1c1,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Observation= "Accuracy", Value = res_w1c1)
+df_val_w1c1 = rbind(df_val_w1c1,nwln, stringsAsFactors=FALSE)
+
+print(df_val_w1c1)
 
 #---------End of Binomial Regression---------------------
 
 #---------2.2 C:Fast k-Nearest Neighbour-----------------
 
+#Tuning hyperparameters
+lrnr<-makeLearner("classif.fnn")
+#Get parameter set of the learner
+getParamSet(lrnr)
+ps <- makeParamSet(makeIntegerParam( "k",     lower = 1, upper = 10),
+                   makeDiscreteParam("algorithm",values = c("cover_tree","kd_tree","brute"))
+)
+lrnr = makeTuneWrapper(lrnr, resampling = inner, par.set = ps, control = ctrl)
+modw = train(lrnr, clsf.task)
+print(getTuneResult(modw))
+r = resample(lrnr, clsf.task, outer, extract = getTuneResult)
+print(r$extract)
+
+#using the yuned parameters to make the learner
+lrnr<-makeLearner("classif.fnn",
+                  par.vals = list(k=10,
+                                  algorithm="kd_tree"))
+
 #Defining learner model
-lrn_wc2<- makeFeatSelWrapper(learner    = "classif.fnn", 
+lrn_w1c2<- makeFeatSelWrapper(learner    = lrnr, 
                              resampling = cv.folds,
                              control    = control1, 
                              show.info  = FALSE)
 
 
 #Training of model to extract features
-mod_wc2 = mlr::train(lrn_wc2, task = clsf.task)
+mod_w1c2 = mlr::train(lrn_w1c2, task = clsf.task)
+
+#Extract the features
+sfeats = getFeatSelResult(mod_w1c2)
+
+cols<-sfeats$x
+cols<-c(cols,"response")
+#print(cols)
+
+#dataframe with selected features
+df_tune_w1c2<-df_samp_cls
+df_tune_w1c2<-df_tune_w1c2[, names(df_tune_w1c2) %in% cols] 
+ncol(df_tune_w1c2)
 
 #Getting Accuracy ~ Model training & Testing with subset of features
-res_w1c2<-modeltest(mod_wc2, 'C')
+res_w1c2<-modeltest(df_tune_w1c2, 'C')
 print(res_w1c2)
+
+#Capturing best values of hyperparameter after tuning
+df_val_w1c2<-data.frame(Hyperparameter=character(), Value=character())
+
+nwln<- list(Hyperparameter= "No. of Features", Value = (ncol(df_tune_w1c2)-1))
+df_val_w1c2 = rbind(df_val_w1c2,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Hyperparameter= "k", Value = tuned.model_c2$x$k)
+df_val_w1c2 = rbind(df_val_w1c2,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Hyperparameter= "algorithm", Value = tuned.model_c2$x$algorithm)
+df_val_w1c2 = rbind(df_val_w1c2,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Hyperparameter= "Accuracy", Value = res_w1c2)
+df_val_w1c2 = rbind(df_val_w1c2,nwln, stringsAsFactors=FALSE)
+
+
+print(df_val_w1c2)
 
 #---------End of Fast k-Nearest Neighbour----------------
 
 #---------2.3 C:Linear Discriminant Analysis-------------
 
+#Tuning hyperparameters
+lrnr<-makeLearner("classif.lda")
+#Get parameter set of the learner
+getParamSet(lrnr)
+ps <- makeParamSet(makeNumericParam( "nu",     lower = 2, upper = 10),
+                   makeNumericParam( "tol",    lower = 0, upper = 0.0005),
+                   makeDiscreteParam("predict.method",values = c("plug-in","predictive","debiased"))
+)
+lrnr = makeTuneWrapper(lrnr, resampling = inner, par.set = ps, control = ctrl)
+modw = train(lrnr, clsf.task)
+print(getTuneResult(modw))
+r = resample(lrnr, clsf.task, outer, extract = getTuneResult)
+print(r$extract)
+
+#using the yuned parameters to make the learner
+lrnr<-makeLearner("classif.lda",
+                  par.vals = list(nu=10,
+                                  tot=0,
+                                  predict.method="predictive"))
+
 #Defining learner model
-lrn_wc3<- makeFeatSelWrapper(learner    = "classif.lda", 
+lrn_w1c3<- makeFeatSelWrapper(learner    = lrnr, 
                              resampling = cv.folds,
                              control    = control1, 
                              show.info  = FALSE)
 
 
 #Training of model to extract features
-mod_wc3 = mlr::train(lrn_wc3, task = clsf.task)
+mod_w1c3 = mlr::train(lrn_w1c3, task = clsf.task)
+
+#Extract the features
+sfeats = getFeatSelResult(mod_w1c3)
+
+cols<-sfeats$x
+cols<-c(cols,"response")
+#print(cols)
+
+#dataframe with selected features
+df_tune_w1c3<-df_samp_cls
+df_tune_w1c3<-df_tune_w1c3[, names(df_tune_w1c3) %in% cols] 
+ncol(df_tune_w1c3)
 
 #Getting Accuracy ~ Model training & Testing with subset of features
-res_w1c3<-modeltest(mod_wc3, 'C')
+res_w1c3<-modeltest(df_tune_w1c3, 'C')
 print(res_w1c3)
+
+#Capturing best values of hyperparameter after tuning
+df_val_w1c3<-data.frame(Hyperparameter=character(), Value=character())
+
+nwln<- list(Hyperparameter= "No. of Features", Value = (ncol(df_tune_w1c3)-1))
+df_val_w1c3 = rbind(df_val_w1c3,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Hyperparameter= "nu", Value = tuned.model_c3$x$nu)
+df_val_w1c3 = rbind(df_val_w1c3,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Hyperparameter= "tol", Value = tuned.model_c3$x$tol)
+df_val_w1c3 = rbind(df_val_w1c3,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Hyperparameter= "predict.method", Value = tuned.model_c3$x$predict.method)
+df_val_w1c3 = rbind(df_val_w1c3,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Hyperparameter= "Accuracy", Value = res_w1c3)
+df_val_w1c3 = rbind(df_val_w1c3,nwln, stringsAsFactors=FALSE)
+
+print(df_val_w1c3)
 
 #---------End of Linear Discriminant Analysis------------
 #--------------------------------------------------------
