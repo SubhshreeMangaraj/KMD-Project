@@ -1,463 +1,902 @@
-
-
 library(shiny)
 
-ui <- fluidPage(
-
-    # Application title
-    titlePanel("Feature Selection Methods' comparision"),
-
-    # Sidebar with a slider input for number of bins 
+ui <-fluidPage(
+    titlePanel("Comparision of Feature Selection Methods"),
     sidebarLayout(
-        sidebarPanel(width = 4,
-                     
-                     selectInput(inputId = "choice_1", 
-                                 label = "Feature Selection Method",
-                                 choices = list("Filter Method","Wrapper Method"), 
-                                 selected = "Filter Method", 
-                                 multiple = FALSE),
-                     
-                     conditionalPanel(
-                         condition = "input.choice_1 == 'Filter Method'",
-                         selectInput(inputId = "choice_2", 
-                                     label = "Choose the Filter Method",
-                                     choices = list("FSelector_chi.squared",
-                                                    "party_cforest.importance",
-                                                    "FSelectorRcpp_information.gain"), 
-                                     selected = "FSelector_chi.squared", 
-                                     multiple = FALSE)
-                     ),
-                     conditionalPanel(
-                         condition = "input.choice_1 == 'Wrapper Method",
-                         selectInput(inputId = "choice_2", 
-                                     label = "Choose the Wrapper Method",
-                                     choices = list("Random",
-                                                    "Exhaustive",
-                                                    "GA",
-                                                    "Sequestial"), 
-                                     selected = "Random", 
-                                     multiple = FALSE)
-                     ),
-                     
-                     selectInput(inputId = "choice_3", 
-                                 label = "Choose Model Type",
-                                 choices = list("Regression",
-                                                "Classification"), 
-                                 selected = "Regression", 
-                                 multiple = FALSE),
-                     
-                     conditionalPanel(
-                         condition = "input.choice_3 == 'Regression'",
-                         selectInput(inputId = "choice_4", 
-                                     label = "Choose the Regression Method",
-                                     choices = list("K-Nearest-Neighbor regressiong",
-                                                    "Conditional Inference Trees",
-                                                    "Bayesian CART"), 
-                                     selected = "K-Nearest-Neighbor regressiong", 
-                                     multiple = FALSE)
-                     ),
-                     conditionalPanel(
-                         condition = "input.choice_3 == 'Classification'",
-                         selectInput(inputId = "choice_4", 
-                                     label = "Choose the Classification Method",
-                                     choices = list("Binomial Regression",
-                                                    "Fast k-Nearest Neighbour",
-                                                    "Linear Discriminant Analysis"), 
-                                     selected = "Binomial Regression", 
-                                     multiple = FALSE)
-                     )
-                     
-                     #actionButton(inputId = "goButton", label = "Go!")
-                     
-        ),
+        sidebarPanel(width = 15,
+    fluidRow(
         
-        # Show the table
-        mainPanel(
-       
-            tableOutput("view")
-        )
+        column(3, wellPanel(
+            selectInput("input_type", "Feature Selection MEthod",
+                        c("Filter Method","Wrapper Method")
+            )
+        )),
+        
+        column(3, wellPanel(
+            # This outputs the dynamic UI component
+            uiOutput("ui")
+        )),
+        
+        column(3, wellPanel(
+            selectInput("input_type2", "Model Selection Method",
+                        c("Regression","Classification")
+            ))),
+        
+        column(3, wellPanel(
+            # This outputs the dynamic UI component
+            uiOutput("ui2")
+        ))
     )
+),
+# Show the table
+mainPanel(
+    
+    tableOutput("view"),
+    plotOutput("plot")
 )
 
-# Define server logic required to draw a histogram
-server <- function(input, output) {
+))
 
+
+server <-function(input, output) {
+    
+    output$ui <- renderUI({
+        if (is.null(input$input_type))
+            return()
+        
+        # Depending on input$input_type, we'll generate a different
+        # UI component and send it to the client.
+        switch(input$input_type,
+               
+              
+               "Filter Method" = selectInput("dynamic", "Choose the Filter Method",
+                                           choices = c("FSelector_chi.squared"          = "FSelector_chi.squared",
+                                                       "party_cforest.importance"       = "party_cforest.importance",
+                                                       "FSelectorRcpp_information.gain" = "FSelectorRcpp_information.gain"),
+                                           selected = "FSelector_chi.squared"
+               ),
+               
+               "Wrapper Method" = selectInput("dynamic", "Choose the Wrapper Method",
+                                             choices = c("Random"          = "Random",
+                                                         "Exhaustive"      = "Exhaustive",
+                                                         "GA"              = "GA",
+                                                         "Sequential"      = "Sequential"),
+                                             selected = "Random"
+               )
+        )
+    })
+    
+    output$ui2 <- renderUI({
+        if (is.null(input$input_type2))
+            return()
+        
+        # Depending on input$input_type, we'll generate a different
+        # UI component and send it to the client.
+        switch(input$input_type2,
+               
+               
+               "Regression" = selectInput("dynamic2", "Choose the Regression Method",
+                                             choices = c("K-Nearest-Neighbor regressiong"  = "K-Nearest-Neighbor regressiong",
+                                                         "Conditional Inference Trees"     = "Conditional Inference Trees",
+                                                         "Bayesian CART"                   = "Bayesian CART"),
+                                             selected = "K-Nearest-Neighbor regressiong"
+               ),
+               
+               "Classification" = selectInput("dynamic2", "Choose the Classification Method",
+                                              choices = c("Binomial Regression"          = "Binomial Regression",
+                                                          "Fast k-Nearest Neighbour"     = "Fast k-Nearest Neighbour",
+                                                          "Linear Discriminant Analysis" = "Linear Discriminant Analysis"),
+                                              selected = "Binomial Regression"
+               )
+        )
+    })
     
     output$view <- renderTable({
         
-        if(input$choice_1 == 'Filter Method'){
+        if(input$input_type  == "Filter Method"         &&
+           input$dynamic     == "FSelector_chi.squared" &&
+           input$input_type2 == "Regression"            &&
+           input$dynamic2    == "K-Nearest-Neighbor regressiong"){
             
-            if(input$choice_2 == 'FSelector_chi.squared'){
-                
-                if(input$choice_3 == 'Regression'){
-                    
-                    if(input$choice_4 == 'K-Nearest-Neighbor regressiong'){
-                        
-                        df<-data.frame(df_val_r1)
-                        
-                    }
-                    
-                    else if(input$choice_4 == 'Conditional Inference Trees'){
-                        
-                        df<-data.frame(df_val_r2)
-                        
-                    }
-                    
-                    else if(input$choice_4 == 'Bayesian CART'){
-                        
-                        df<-data.frame(df_val_r3)
-                        
-                    }
-                    
-                }
-                
-                else if(input$choice_3 == 'Classification'){
-                    
-                    
-                    if(input$choice_4 == 'Binomial Regression'){
-                        
-                        df<-data.frame(df_val_c1)
-                        
-                    }
-                    
-                    else if(input$choice_4 == 'Fast k-Nearest Neighbour'){
-                        
-                        df<-data.frame(df_val_c2)
-                        
-                    }
-                    
-                    else if(input$choice_4 == 'Linear Discriminant Analysis'){
-                        
-                        df<-data.frame(df_val_c3)
-                        
-                    }
-                    
-                    
-                }
-                
-            }
-            
-            else if(input$choice_2 == 'party_cforest.importance'){
-                
-                
-                if(input$choice_3 == 'Regression'){
-                    
-                    
-                    if(input$choice_4 == 'K-Nearest-Neighbor regressiong'){
-                        
-                        df<-data.frame(df_val_f2r1)
-                        
-                    }
-                    
-                    else if(input$choice_4 == 'Conditional Inference Trees'){
-                        
-                        df<-data.frame(df_val_f2r2)
-                        
-                    }
-                    
-                    else if(input$choice_4 == 'Bayesian CART'){
-                        
-                        df<-data.frame(df_val_f2r3)
-                        
-                    }
-                    
-                }
-                
-                else if(input$choice_3 == 'Classification'){
-                    
-                    
-                    if(input$choice_4 == 'Binomial Regression'){
-                        
-                        df<-data.frame(df_val_f2c1)
-                        
-                    }
-                    
-                    else if(input$choice_4 == 'Fast k-Nearest Neighbour'){
-                        
-                        df<-data.frame(df_val_f2c2)
-                        
-                    }
-                    
-                    else if(input$choice_4 == 'Linear Discriminant Analysis'){
-                        
-                        df<-data.frame(df_val_f2c3)
-                        
-                    }
-                    
-                    
-                }
-                
-            }
-            
-            else if(input$choice_2 == 'FSelectorRcpp_information.gain'){
-                
-                
-                if(input$choice_3 == 'Regression'){
-                    
-                    
-                    if(input$choice_4 == 'K-Nearest-Neighbor regressiong'){
-                        
-                        df<-data.frame(df_val_f3r1)
-                        
-                    }
-                    
-                    else if(input$choice_4 == 'Conditional Inference Trees'){
-                        
-                        df<-data.frame(df_val_f3r2)
-                        
-                    }
-                    
-                    else if(input$choice_4 == 'Bayesian CART'){
-                        
-                        df<-data.frame(df_val_f3r3)
-                        
-                    }
-                    
-                }
-                
-                else if(input$choice_3 == 'Classification'){
-                    
-                    
-                    if(input$choice_4 == 'Binomial Regression'){
-                        
-                        df<-data.frame(df_val_f3c1)
-                        
-                    }
-                    
-                    else if(input$choice_4 == 'Fast k-Nearest Neighbour'){
-                        
-                        df<-data.frame(df_val_f3c2)
-                        
-                    }
-                    
-                    else if(input$choice_4 == 'Linear Discriminant Analysis'){
-                        
-                        df<-data.frame(df_val_f3c3)
-                        
-                    }
-                    
-                    
-                }
-                
-            }
-            
+            df<-data.frame(df_val_r1)
         }
-        else if(input$choice_1 == 'Wrapper Method'){
+        
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "FSelector_chi.squared" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "Conditional Inference Trees"){
             
-            if(input$choice_2 == 'Random'){
-                
-                
-                if(input$choice_3 == 'Regression'){
-                    
-                    
-                    if(input$choice_4 == 'K-Nearest-Neighbor regressiong'){
-                        
-                        df<-data.frame(res_w1r1)
-                        
-                    }
-                    
-                    else if(input$choice_4 == 'Conditional Inference Trees'){
-                        
-                        df<-data.frame(res_w1r2)
-                        
-                    }
-                    
-                    else if(input$choice_4 == 'Bayesian CART'){
-                        
-                        df<-data.frame(res_w1r3)
-                        
-                    }
-                    
-                }
-                
-                else if(input$choice_3 == 'Classification'){
-                    
-                    
-                    if(input$choice_4 == 'Binomial Regression'){
-                        
-                        df<-data.frame(res_w1c1)
-                        
-                    }
-                    
-                    else if(input$choice_4 == 'Fast k-Nearest Neighbour'){
-                        
-                        df<-data.frame(res_w1c2)
-                        
-                    }
-                    
-                    else if(input$choice_4 == 'Linear Discriminant Analysis'){
-                        
-                        df<-data.frame(res_w1c3)
-                        
-                    }
-                    
-                    
-                }
-                
-                
-            }
+            df<-data.frame(df_val_r2)
+        }
+        
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "FSelector_chi.squared" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "Bayesian CART"){
             
-            else if(input$choice_2 == 'GA'){
-                
-                if(input$choice_3 == 'Regression'){
-                    
-                    
-                    if(input$choice_4 == 'K-Nearest-Neighbor regressiong'){
-                        
-                        df<-data.frame(res_w2r1)
-                        
-                    }
-                    
-                    else if(input$choice_4 == 'Conditional Inference Trees'){
-                        
-                        df<-data.frame(res_w2r2)
-                        
-                    }
-                    
-                    else if(input$choice_4 == 'Bayesian CART'){
-                        
-                        df<-data.frame(res_w2r3)
-                        
-                    }
-                    
-                }
-                
-                else if(input$choice_3 == 'Classification'){
-                    
-                    
-                    if(input$choice_4 == 'Binomial Regression'){
-                        
-                        df<-data.frame(res_w2c1)
-                        
-                    }
-                    
-                    else if(input$choice_4 == 'Fast k-Nearest Neighbour'){
-                        
-                        df<-data.frame(res_w2c2)
-                        
-                    }
-                    
-                    else if(input$choice_4 == 'Linear Discriminant Analysis'){
-                        
-                        df<-data.frame(res_w2c3)
-                        
-                    }
-                    
-                    
-                }
-                
-            }
+            df<-data.frame(df_val_r3)
+        }
+        
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "FSelector_chi.squared" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Binomial Regression"){
             
-           
+            df<-data.frame(df_val_c1)
+        }
+        
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "FSelector_chi.squared" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Fast k-Nearest Neighbour"){
             
-            else if(input$choice_2 == 'Sequestial'){ 
-                
-                if(input$choice_3 == 'Regression'){
-                    
-                    
-                    if(input$choice_4 == 'K-Nearest-Neighbor regressiong'){
-                        
-                        df<-data.frame(res_w3r1)
-                        
-                    }
-                    
-                    else if(input$choice_4 == 'Conditional Inference Trees'){
-                        
-                        df<-data.frame(res_w3r2)
-                        
-                    }
-                    
-                    else if(input$choice_4 == 'Bayesian CART'){
-                        
-                        df<-data.frame(res_w3r3)
-                        
-                    }
-                    
-                }
-                
-                else if(input$choice_3 == 'Classification'){
-                    
-                    
-                    if(input$choice_4 == 'Binomial Regression'){
-                        
-                        df<-data.frame(res_w3c1)
-                        
-                    }
-                    
-                    else if(input$choice_4 == 'Fast k-Nearest Neighbour'){
-                        
-                        df<-data.frame(res_w3c2)
-                        
-                    }
-                    
-                    else if(input$choice_4 == 'Linear Discriminant Analysis'){
-                        
-                        df<-data.frame(res_w3c3)
-                        
-                    }
-                    
-                    
-                }
-                
-            }
+            df<-data.frame(df_val_c2)
+        }
+        
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "FSelector_chi.squared" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Linear Discriminant Analysis"){
             
-            else if(input$choice_2 == 'Exhaustive'){
-                
-                if(input$choice_3 == 'Regression'){
-                    
-                    
-                    if(input$choice_4 == 'K-Nearest-Neighbor regressiong'){
-                        
-                        df<-data.frame(res_w4r1)
-                        
-                    }
-                    
-                    else if(input$choice_4 == 'Conditional Inference Trees'){
-                        
-                        df<-data.frame(res_w4r2)
-                        
-                    }
-                    
-                    else if(input$choice_4 == 'Bayesian CART'){
-                        
-                        df<-data.frame(res_w4r3)
-                        
-                    }
-                    
-                }
-                
-                else if(input$choice_3 == 'Classification'){
-                    
-                    
-                    if(input$choice_4 == 'Binomial Regression'){
-                        
-                        df<-data.frame(res_w4c1)
-                        
-                    }
-                    
-                    else if(input$choice_4 == 'Fast k-Nearest Neighbour'){
-                        
-                        df<-data.frame(res_w4c2)
-                        
-                    }
-                    
-                    else if(input$choice_4 == 'Linear Discriminant Analysis'){
-                        
-                        df<-data.frame(res_w4c3)
-                        
-                    }
-                    
-                    
-                }
-                
-            }
+            df<-data.frame(df_val_c3)
+        }
+        
+#-----------------------------------------------------------------------------------
+        else if(input$input_type  == "Filter Method"         &&
+           input$dynamic     == "party_cforest.importance" &&
+           input$input_type2 == "Regression"            &&
+           input$dynamic2    == "K-Nearest-Neighbor regressiong"){
+            
+            df<-data.frame(df_val_f2r1)
+        }
+        
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "party_cforest.importance" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "Conditional Inference Trees"){
+            
+            df<-data.frame(df_val_f2r2)
+        }
+        
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "party_cforest.importance" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "Bayesian CART"){
+            
+            df<-data.frame(df_val_f2r3)
+        }
+        
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "party_cforest.importance" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Binomial Regression"){
+            
+            df<-data.frame(df_val_f2c1)
+        }
+        
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "party_cforest.importance" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Fast k-Nearest Neighbour"){
+            
+            df<-data.frame(df_val_f2c2)
+        }
+        
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "party_cforest.importance" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Linear Discriminant Analysis"){
+            
+            df<-data.frame(df_val_f2c3)
+        }
+
+#-----------------------------------------------------------------------------
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "FSelectorRcpp_information.gain" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "K-Nearest-Neighbor regressiong"){
+            
+            df<-data.frame(df_val_f3r1)
+        }
+        
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "FSelectorRcpp_information.gain" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "Conditional Inference Trees"){
+            
+            df<-data.frame(df_val_f3r2)
+        }
+        
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "FSelectorRcpp_information.gain" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "Bayesian CART"){
+            
+            df<-data.frame(df_val_f3r3)
+        }
+        
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "FSelectorRcpp_information.gain" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Binomial Regression"){
+            
+            df<-data.frame(df_val_f3c1)
+        }
+        
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "FSelectorRcpp_information.gain" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Fast k-Nearest Neighbour"){
+            
+            df<-data.frame(df_val_f3c2)
+        }
+        
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "FSelectorRcpp_information.gain" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Linear Discriminant Analysis"){
+            
+            df<-data.frame(df_val_f3c3)
+        }
+#--------------------------------------------------------------------------------
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Random"                 &&
+                input$input_type2 == "Regression"             &&
+                input$dynamic2    == "K-Nearest-Neighbor regressiong"){
+            
+            df<-data.frame(df_val_w1r1)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Random" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "Conditional Inference Trees"){
+            
+            df<-data.frame(res_w1r2)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Random" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "Bayesian CART"){
+            
+            df<-data.frame(res_w1r3)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Random" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Binomial Regression"){
+            
+            df<-data.frame(res_w1c1)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Random" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Fast k-Nearest Neighbour"){
+            
+            df<-data.frame(res_w1c2)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Random" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Linear Discriminant Analysis"){
+            
+            df<-data.frame(res_w1c3)
+        }
+#--------------------------------------------------------------------------
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "GA"                 &&
+                input$input_type2 == "Regression"             &&
+                input$dynamic2    == "K-Nearest-Neighbor regressiong"){
+            
+            df<-data.frame(res_w2r1)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "GA" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "Conditional Inference Trees"){
+            
+            df<-data.frame(res_w2r2)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "GA" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "Bayesian CART"){
+            
+            df<-data.frame(res_w2r3)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "GA" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Binomial Regression"){
+            
+            df<-data.frame(res_w2c1)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "GA" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Fast k-Nearest Neighbour"){
+            
+            df<-data.frame(res_w2c2)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "GA" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Linear Discriminant Analysis"){
+            
+            df<-data.frame(res_w2c3)
+        }
+#-------------------------------------------------------------------------
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Sequential"                 &&
+                input$input_type2 == "Regression"             &&
+                input$dynamic2    == "K-Nearest-Neighbor regressiong"){
+            
+            df<-data.frame(res_w3r1)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Sequential" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "Conditional Inference Trees"){
+            
+            df<-data.frame(res_w3r2)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Sequential" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "Bayesian CART"){
+            
+            df<-data.frame(res_w3r3)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Sequential" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Binomial Regression"){
+            
+            df<-data.frame(res_w3c1)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Sequential" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Fast k-Nearest Neighbour"){
+            
+            df<-data.frame(res_w3c2)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Sequential" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Linear Discriminant Analysis"){
+            
+            df<-data.frame(res_w3c3) 
+        }
+#---------------------------------------------------------------------------
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Exhaustive"                 &&
+                input$input_type2 == "Regression"             &&
+                input$dynamic2    == "K-Nearest-Neighbor regressiong"){
+            
+            df<-data.frame(res_w4r1)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Exhaustive" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "Conditional Inference Trees"){
+            
+            df<-data.frame(res_w4r2)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Exhaustive" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "Bayesian CART"){
+            
+            df<-data.frame(res_w4r3)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Exhaustive" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Binomial Regression"){
+            
+            df<-data.frame(res_w4c1)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Exhaustive" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Fast k-Nearest Neighbour"){
+            
+            df<-data.frame(res_w4c2)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Exhaustive" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Linear Discriminant Analysis"){
+            
+            df<-data.frame(res_w4c3) 
+        }
+    }
+        
+    )
+#---------------------------------------------------------------------------------------------
+#------------------------PLOTS----------------------------------------------------------------
+    
+    
+    output$plot <- renderPlot({
+        
+        if(input$input_type  == "Filter Method"         &&
+           input$dynamic     == "FSelector_chi.squared" &&
+           input$input_type2 == "Regression"            &&
+           input$dynamic2    == "K-Nearest-Neighbor regressiong"){
+            
+            regr.task1<-makeRegrTask(
+                                    data   = data.frame(df_tune_r1), 
+                                    target = "response")
+            
+            fv2 = generateFilterValuesData(task   = regr.task1, 
+                                           method = "FSelector_chi.squared")
+            plotFilterValues(fv2, feat.type.cols = TRUE) + ggpubr::theme_pubr()
+        }
+        
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "FSelector_chi.squared" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "Conditional Inference Trees"){
+            
+            regr.task1<-makeRegrTask(
+                data   = data.frame(df_tune_r2), 
+                target = "response")
+            
+            fv2 = generateFilterValuesData(task   = regr.task1, 
+                                           method = "FSelector_chi.squared")
+            plotFilterValues(fv2, feat.type.cols = TRUE) + ggpubr::theme_pubr()
             
         }
         
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "FSelector_chi.squared" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "Bayesian CART"){
+            
+            regr.task1<-makeRegrTask(
+                data   = data.frame(df_tune_r3), 
+                target = "response")
+            
+            fv2 = generateFilterValuesData(task   = regr.task1, 
+                                           method = "FSelector_chi.squared")
+            plotFilterValues(fv2, feat.type.cols = TRUE) + ggpubr::theme_pubr()
+        }
+        
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "FSelector_chi.squared" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Binomial Regression"){
+            
+            clasf.task1<-makeClassifTask(
+                data   = data.frame(df_tune_c1), 
+                target = "response")
+            
+            fv2 = generateFilterValuesData(task   = regr.task1, 
+                                           method = "FSelector_chi.squared")
+            plotFilterValues(fv2, feat.type.cols = TRUE) + ggpubr::theme_pubr()
+        }
+        
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "FSelector_chi.squared" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Fast k-Nearest Neighbour"){
+            
+            clasf.task1<-makeClassifTask(
+                data   = data.frame(df_tune_c2), 
+                target = "response")
+            
+            fv2 = generateFilterValuesData(task   = regr.task1, 
+                                           method = "FSelector_chi.squared")
+            plotFilterValues(fv2, feat.type.cols = TRUE) + ggpubr::theme_pubr()
+        }
+        
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "FSelector_chi.squared" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Linear Discriminant Analysis"){
+            
+            clasf.task1<-makeClassifTask(
+                data   = data.frame(df_tune_c3), 
+                target = "response")
+            
+            fv2 = generateFilterValuesData(task   = regr.task1, 
+                                           method = "FSelector_chi.squared")
+            plotFilterValues(fv2, feat.type.cols = TRUE) + ggpubr::theme_pubr()
+        }
+        
+        #-----------------------------------------------------------------------------------
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "party_cforest.importance" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "K-Nearest-Neighbor regressiong"){
+            
+            regr.task1<-makeRegrTask(
+                data   = data.frame(df_tune_f2r1), 
+                target = "response")
+            
+            fv2 = generateFilterValuesData(task   = regr.task1, 
+                                           method = "party_cforest.importance")
+            plotFilterValues(fv2, feat.type.cols = TRUE) + ggpubr::theme_pubr()
+        }
+        
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "party_cforest.importance" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "Conditional Inference Trees"){
+            
+            regr.task1<-makeRegrTask(
+                data   = data.frame(df_tune_f2r2), 
+                target = "response")
+            
+            fv2 = generateFilterValuesData(task   = regr.task1, 
+                                           method = "party_cforest.importance")
+            plotFilterValues(fv2, feat.type.cols = TRUE) + ggpubr::theme_pubr()
+        }
+        
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "party_cforest.importance" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "Bayesian CART"){
+            
+            regr.task1<-makeRegrTask(
+                data   = data.frame(df_tune_f2r3), 
+                target = "response")
+            
+            fv2 = generateFilterValuesData(task   = regr.task1, 
+                                           method = "party_cforest.importance")
+            plotFilterValues(fv2, feat.type.cols = TRUE) + ggpubr::theme_pubr()
+        }
+        
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "party_cforest.importance" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Binomial Regression"){
+            
+            clasf.task1<-makeClassifTask(
+                data   = data.frame(df_tune_f2c1), 
+                target = "response")
+            
+            fv2 = generateFilterValuesData(task   = regr.task1, 
+                                           method = "party_cforest.importance")
+            plotFilterValues(fv2, feat.type.cols = TRUE) + ggpubr::theme_pubr()
+        }
+        
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "party_cforest.importance" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Fast k-Nearest Neighbour"){
+            
+            clasf.task1<-makeClassifTask(
+                data   = data.frame(df_tune_f2c2), 
+                target = "response")
+            
+            fv2 = generateFilterValuesData(task   = regr.task1, 
+                                           method = "party_cforest.importance")
+            plotFilterValues(fv2, feat.type.cols = TRUE) + ggpubr::theme_pubr()
+        }
+        
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "party_cforest.importance" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Linear Discriminant Analysis"){
+            
+            clasf.task1<-makeClassifTask(
+                data   = data.frame(df_tune_f2c3), 
+                target = "response")
+            
+            fv2 = generateFilterValuesData(task   = regr.task1, 
+                                           method = "party_cforest.importance")
+            plotFilterValues(fv2, feat.type.cols = TRUE) + ggpubr::theme_pubr()
+        }
+        
+        #-----------------------------------------------------------------------------
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "FSelectorRcpp_information.gain" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "K-Nearest-Neighbor regressiong"){
+            
+            regr.task1<-makeRegrTask(
+                data   = data.frame(df_tune_f3r1), 
+                target = "response")
+            
+            fv2 = generateFilterValuesData(task   = regr.task1, 
+                                           method = "FSelectorRcpp_information.gain")
+            plotFilterValues(fv2, feat.type.cols = TRUE) + ggpubr::theme_pubr()
+        }
+        
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "FSelectorRcpp_information.gain" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "Conditional Inference Trees"){
+            
+            regr.task1<-makeRegrTask(
+                data   = data.frame(df_tune_f3r2), 
+                target = "response")
+            
+            fv2 = generateFilterValuesData(task   = regr.task1, 
+                                           method = "FSelectorRcpp_information.gain")
+            plotFilterValues(fv2, feat.type.cols = TRUE) + ggpubr::theme_pubr()
+        }
+        
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "FSelectorRcpp_information.gain" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "Bayesian CART"){
+            
+            regr.task1<-makeRegrTask(
+                data   = data.frame(df_tune_f3r3), 
+                target = "response")
+            
+            fv2 = generateFilterValuesData(task   = regr.task1, 
+                                           method = "FSelectorRcpp_information.gain")
+            plotFilterValues(fv2, feat.type.cols = TRUE) + ggpubr::theme_pubr()
+        }
+        
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "FSelectorRcpp_information.gain" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Binomial Regression"){
+            
+            clasf.task1<-makeClassifTask(
+                data   = data.frame(df_tune_f3c1), 
+                target = "response")
+            
+            fv2 = generateFilterValuesData(task   = regr.task1, 
+                                           method = "FSelectorRcpp_information.gain")
+            plotFilterValues(fv2, feat.type.cols = TRUE) + ggpubr::theme_pubr()
+        }
+        
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "FSelectorRcpp_information.gain" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Fast k-Nearest Neighbour"){
+            
+            clasf.task1<-makeClassifTask(
+                data   = data.frame(df_tune_f3c2), 
+                target = "response")
+            
+            fv2 = generateFilterValuesData(task   = regr.task1, 
+                                           method = "FSelectorRcpp_information.gain")
+            plotFilterValues(fv2, feat.type.cols = TRUE) + ggpubr::theme_pubr()
+        }
+        
+        else if(input$input_type  == "Filter Method"         &&
+                input$dynamic     == "FSelectorRcpp_information.gain" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Linear Discriminant Analysis"){
+            
+            clasf.task1<-makeClassifTask(
+                data   = data.frame(df_tune_f3c3), 
+                target = "response")
+            
+            fv2 = generateFilterValuesData(task   = regr.task1, 
+                                           method = "FSelectorRcpp_information.gain")
+            plotFilterValues(fv2, feat.type.cols = TRUE) + ggpubr::theme_pubr()
+        }
+        #--------------------------------------------------------------------------------
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Random"                 &&
+                input$input_type2 == "Regression"             &&
+                input$dynamic2    == "K-Nearest-Neighbor regressiong"){
+            
+            clasf.task1<-makeRegrTask(
+                data   = data.frame(df_tune_w1r1), 
+                target = "response")
+            
+            fv2 = generateFilterValuesData(task   = regr.task1, 
+                                           method = "FSelector_chi.squared")
+            plotFilterValues(fv2, feat.type.cols = TRUE) + ggpubr::theme_pubr()
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Random" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "Conditional Inference Trees"){
+            
+            df<-data.frame(res_w1r2)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Random" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "Bayesian CART"){
+            
+            df<-data.frame(res_w1r3)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Random" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Binomial Regression"){
+            
+            df<-data.frame(res_w1c1)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Random" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Fast k-Nearest Neighbour"){
+            
+            df<-data.frame(res_w1c2)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Random" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Linear Discriminant Analysis"){
+            
+            df<-data.frame(res_w1c3)
+        }
+        #--------------------------------------------------------------------------
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "GA"                 &&
+                input$input_type2 == "Regression"             &&
+                input$dynamic2    == "K-Nearest-Neighbor regressiong"){
+            
+            df<-data.frame(res_w2r1)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "GA" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "Conditional Inference Trees"){
+            
+            df<-data.frame(res_w2r2)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "GA" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "Bayesian CART"){
+            
+            df<-data.frame(res_w2r3)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "GA" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Binomial Regression"){
+            
+            df<-data.frame(res_w2c1)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "GA" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Fast k-Nearest Neighbour"){
+            
+            df<-data.frame(res_w2c2)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "GA" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Linear Discriminant Analysis"){
+            
+            df<-data.frame(res_w2c3)
+        }
+        #-------------------------------------------------------------------------
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Sequential"                 &&
+                input$input_type2 == "Regression"             &&
+                input$dynamic2    == "K-Nearest-Neighbor regressiong"){
+            
+            df<-data.frame(res_w3r1)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Sequential" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "Conditional Inference Trees"){
+            
+            df<-data.frame(res_w3r2)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Sequential" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "Bayesian CART"){
+            
+            df<-data.frame(res_w3r3)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Sequential" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Binomial Regression"){
+            
+            df<-data.frame(res_w3c1)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Sequential" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Fast k-Nearest Neighbour"){
+            
+            df<-data.frame(res_w3c2)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Sequential" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Linear Discriminant Analysis"){
+            
+            df<-data.frame(res_w3c3) 
+        }
+        #---------------------------------------------------------------------------
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Exhaustive"                 &&
+                input$input_type2 == "Regression"             &&
+                input$dynamic2    == "K-Nearest-Neighbor regressiong"){
+            
+            df<-data.frame(res_w4r1)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Exhaustive" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "Conditional Inference Trees"){
+            
+            df<-data.frame(res_w4r2)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Exhaustive" &&
+                input$input_type2 == "Regression"            &&
+                input$dynamic2    == "Bayesian CART"){
+            
+            df<-data.frame(res_w4r3)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Exhaustive" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Binomial Regression"){
+            
+            df<-data.frame(res_w4c1)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Exhaustive" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Fast k-Nearest Neighbour"){
+            
+            df<-data.frame(res_w4c2)
+        }
+        
+        else if(input$input_type  == "Wrapper Method"         &&
+                input$dynamic     == "Exhaustive" &&
+                input$input_type2 == "Classification"            &&
+                input$dynamic2    == "Linear Discriminant Analysis"){
+            
+            df<-data.frame(res_w4c3) 
+        }
         
     })
+    
 }
-
 
 
 # Run the application 
