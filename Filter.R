@@ -12,33 +12,37 @@ library(kknn)
 library(randomForest)
 library(tgp)
 library(stats)
-library(fnn)
+library(FNN)
 library(MASS)
 library(FSelectorRcpp)
+library(readr)
+library(here)
+library(randomForestSRC)
+library("parallelMap")
 #---------------------------------------------------------
 
 #--------------------Loading of data----------------------
 
-df_data_reg <- readr::read_rds(file.path(here::here(),"FS_scrirep_charite", "data", "adsl_adsl_sum-dur-regr_df.rds"))
-df_data_clasf<- readr::read_rds(file.path(here::here(),"FS_scrirep_charite", "data", "adsl_adsl_sum-dur-classif_df.rds"))
-
+df_data_reg <- readr::read_rds(file.path(here::here(),"Documents","data", "adsl_adsl_sum-dur-regr_df.rds"))
+df_data_clasf<- readr::read_rds(file.path(here::here(),"Documents","data", "adsl_adsl_sum-dur-classif_df.rds"))
 #---------------------------------------------------------
 
-#------------Data Sampling--------------------------------
-
+#-------------Random sampling of data with a subset of features------------
 #Regression data
-df_samp_reg<-df_data_reg[sample(nrow(df_data_reg),500),]
-temp_tar<-df_samp_reg$response
-df_samp_reg<-df_samp_reg[,sample(ncol(df_samp_reg),15)]
-df_samp_reg$response<-temp_tar
+#df_samp_reg<-df_data_reg[sample(nrow(df_data_reg),50),]
+#temp_tar<-df_samp_reg$response
+#df_samp_reg<-df_samp_reg[,sample(ncol(df_samp_reg),8)]
+#df_samp_reg$response<-temp_tar
 
 #classification data
-df_samp_cls<-df_data_clasf[sample(nrow(df_data_clasf),500),]
-temp_tarc<-df_samp_cls$response
-df_samp_cls<-df_samp_cls[,sample(ncol(df_samp_cls),15)]
-df_samp_cls$response<-temp_tarc
+#df_samp_cls<-df_data_clasf[sample(nrow(df_data_clasf),50),]
+#temp_tarc<-df_samp_cls$response
+#df_samp_cls<-df_samp_cls[,sample(ncol(df_samp_cls),8)]
+#df_samp_cls$response<-temp_tarc
 
-#--------------------------------------------------------
+df_samp_reg <- df_data_reg
+df_samp_cls <- df_data_clasf
+#--------------------------------------------------------------------------
 
 #-----------Model Training and Testing-------------------
 modeltest<- function(df, typeM){
@@ -58,7 +62,7 @@ modeltest<- function(df, typeM){
     
     task.pred = predict(mod, task = regr.task_mod, subset = test.mod)
     task.pred
-    res<-performance(task.pred, measures = mse)
+    res<-round(performance(task.pred, measures = mse),digits = 3)
     
     return(res)
     
@@ -78,7 +82,8 @@ modeltest<- function(df, typeM){
     mod
     task.pred = predict(mod, task = clsf.task_mod, subset = test.mod)
     task.pred
-    res<-performance(task.pred, measures = acc)
+    res = double()
+    res<-round(performance(task.pred, measures = acc),digits = 3)
     
     #r = calculateROCMeasures(task.pred)
     #res<- list(res, r)
@@ -125,25 +130,23 @@ getParamSet(lrn_r1)
 
 # Define parameters of model and search grid ~ !!!! MODEL SPECIFIC !!!!
 model.params_r1 <- makeParamSet(
-                   makeNumericParam("fw.perc", lower = 0, upper = 1),
-                   makeDiscreteParam("fw.method", values = c("FSelector_chi.squared",
-                                                              "party_cforest.importance",
-                                                               "variance")),
-                   makeIntegerParam("k",       lower = 1, upper = 10),
-                   makeNumericParam("distance",lower = 1, upper = 10)
+  makeNumericParam("fw.perc", lower = 0, upper = 1),
+  makeIntegerParam("k",       lower = 1, upper = 10),
+  makeNumericParam("distance",lower = 1, upper = 10)
 )
 
+parallelStartSocket(5)
 # Tune model to find best performing parameter settings using random search algorithm
 tuned.model_r1 <- tuneParams(learner   = lrn_r1,
-                            task       = regr.task,
-                            resampling = cv.folds,
-                            par.set    = model.params_r1,
-                            control    = random.tune,
-                            show.info  = FALSE)
-
+                             task       = regr.task,
+                             resampling = cv.folds,
+                             par.set    = model.params_r1,
+                             control    = random.tune,
+                             show.info  = FALSE)
+parallelStop()
 #Redefining Learner with tuned parameters
 lrn_r1 <- makeFilterWrapper(learner   = "regr.kknn",
-                            fw.method = tuned.model_r1$x$fw.method, 
+                            fw.method = "FSelector_chi.squared", 
                             fw.perc   = tuned.model_r1$x$fw.perc, 
                             par.set   = tuned.model_r1 )
 
@@ -152,6 +155,11 @@ mod_r1<-mlr::train(lrn_r1,regr.task)
 
 #Extract the features
 getFilteredFeatures(mod_r1)
+#getFeatureImportance(mod_r1)
+#fv=generateFilterValuesData(regr.task, method = "FSelector_chi.squared")
+#fv$data
+#plotFilterValues(fv) + ggpubr::theme_pubr()
+#library(ggpubr)
 
 cols<-(getFilteredFeatures(mod_r1))
 cols<-c(cols,"response")
@@ -162,31 +170,42 @@ df_tune_r1<-df_samp_reg
 df_tune_r1<-df_tune_r1[, names(df_tune_r1) %in% cols] 
 ncol(df_tune_r1)
 
-#Getting Accuracy ~ Model training & Testing with subset of features
+#-----------------------------------------------------------------------------------
+#To be done in shiny app
+regr.tmp<-makeRegrTask(id     = "Tin_temp", 
+                        data   = data.frame(df_tune_r1), 
+                        target = "response")
+fv=generateFilterValuesData(regr.tmp, method = "FSelector_chi.squared")
+fv$data
+plotFilterValues(fv,feat.type.cols = TRUE) + ggpubr::theme_pubr()
+#-------------------------------------------------------------------------------
 
+#Getting Accuracy ~ Model training & Testing with subset of features
 res_r1<-modeltest(df_tune_r1, 'R')
 print(res_r1)
 
 #Capturing best values of hyperparameter after tuning
-df_val_r1<-data.frame(Hyperparameter=character(), Value=character())
+df_val_r1<-data.frame(Obervation=character(), Value=character())
 
-nwln<- list(Hyperparameter= "No. of Features", Value = tuned.model_r1$x$fw.perc)
+nwln<- list(Obervation= "No. of Features", Value = ncol(df_tune_r1))
 df_val_r1 = rbind(df_val_r1,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "Filter Method", Value = tuned.model_r1$x$fw.method)
+nwln<- list(Obervation= "fw.perc", Value = (round(tuned.model_r1$x$fw.perc,digits = 3)))
 df_val_r1 = rbind(df_val_r1,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "k", Value = tuned.model_r1$x$k)
+nwln<- list(Obervation= "k", Value = tuned.model_r1$x$k)
 df_val_r1 = rbind(df_val_r1,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "distance", Value = tuned.model_r1$x$distance)
+nwln<- list(Obervation= "distance", Value = round(tuned.model_r1$x$distance, digits = 3))
 df_val_r1 = rbind(df_val_r1,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "mse", Value = res_r1)
+nwln<- list(Obervation= "mse", Value = round(res_r1,digits = 3))
 df_val_r1 = rbind(df_val_r1,nwln, stringsAsFactors=FALSE)
-
 
 print(df_val_r1)
+
+write.csv(df_val_r1, file = "/home/mangaraj/Documents/output/df_val_r1.csv")
+write.csv(df_tune_r1, file = "/home/mangaraj/Documents/output/df_val_r1_data.csv")
 #---------End:K-Nearest-Neighbor regressiong-------------
 
 #---------1.2 R:Conditional Inference Trees--------------
@@ -202,12 +221,12 @@ model.params_r2 <- makeParamSet(makeNumericParam("fw.perc",      lower = 0, uppe
                                 makeDiscreteParam("teststat",    values = c("quad","max")),
                                 makeNumericParam("mincriterion", lower = 0, upper = 1),
                                 makeIntegerParam("minsplit",     lower = 1, upper = 50), #remove cmt for org data
-                                makeIntegerParam("minbucket",    lower = 1, upper = 10)
-                                #makeIntegerParam("maxsurrogate", lower = 0, upper = 10)
-                                #makeIntegerParam("mtry",         lower = 0, upper = 5)
-                                #makeIntegerParam("maxdepth",     lower = 0, upper = 10)
+                                makeIntegerParam("minbucket",    lower = 1, upper = 10),
+                                makeIntegerParam("maxsurrogate", lower = 0, upper = 10),
+                                makeIntegerParam("mtry",         lower = 0, upper = 5),
+                                makeIntegerParam("maxdepth",     lower = 0, upper = 10)
 )
-
+parallelStartSocket(5)
 # Tune model to find best performing parameter settings using random search algorithm
 tuned.model_r2 <- tuneParams(learner    = lrn_r2,
                              task       = regr.task,
@@ -215,7 +234,7 @@ tuned.model_r2 <- tuneParams(learner    = lrn_r2,
                              par.set    = model.params_r2,
                              control    = random.tune,
                              show.info  = FALSE)
-
+parallelStop()
 #Redefining Learner with tuned parameters
 lrn_r2 <- makeFilterWrapper(learner   = "regr.ctree",
                             fw.method = "FSelector_chi.squared", 
@@ -243,34 +262,42 @@ res_r2<-modeltest(df_tune_r2, 'R')
 print(res_r2)
 
 #Capturing best values of hyperparameter after tuning
-df_val_r2<-data.frame(Hyperparameter=character(), Value=character())
+df_val_r2<-data.frame(Obervation=character(), Value=character())
 
-nwln<- list(Hyperparameter= "No. of Features", Value = tuned.model_r2$x$fw.perc)
+nwln<- list(Obervation= "No. of Features", Value = ncol(df_tune_r2))
 df_val_r2 = rbind(df_val_r2,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "teststat", Value = tuned.model_r2$x$teststat)
+nwln<- list(Obervation= "fw.perc", Value = round(tuned.model_r2$x$fw.perc, digits = 3))
 df_val_r2 = rbind(df_val_r2,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "mincriterion", Value = tuned.model_r2$x$mincriterion)
+nwln<- list(Obervation= "teststat", Value = tuned.model_r2$x$teststat)
 df_val_r2 = rbind(df_val_r2,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "minsplit", Value = tuned.model_r2$x$minsplit)
+nwln<- list(Obervation= "mincriterion", Value = round(tuned.model_r2$x$mincriterion,digits = 3))
 df_val_r2 = rbind(df_val_r2,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "minbucket", Value = tuned.model_r2$x$minbucket)
+nwln<- list(Obervation= "minsplit", Value = tuned.model_r2$x$minsplit)
 df_val_r2 = rbind(df_val_r2,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "mse", Value = res_r2)
+nwln<- list(Obervation= "minbucket", Value = tuned.model_r2$x$minbucket)
 df_val_r2 = rbind(df_val_r2,nwln, stringsAsFactors=FALSE)
 
-#nwln<- list(Hyperparameter= "maxsurrogate", Value = tuned.model_r2$x$maxsurrogate)
-#df_val_r2 = rbind(df_val_r2,nwln, stringsAsFactors=FALSE)
+nwln<- list(Obervation= "maxsurrogate", Value = tuned.model_r2$x$maxsurrogate)
+df_val_r2 = rbind(df_val_r2,nwln, stringsAsFactors=FALSE)
 
-#nwln<- list(Hyperparameter= "mtry", Value = tuned.model_r2$x$mtry)
-#df_val_r2 = rbind(df_val_r2,nwln, stringsAsFactors=FALSE)
+nwln<- list(Obervation= "mtry", Value = tuned.model_r2$x$mtry)
+df_val_r2 = rbind(df_val_r2,nwln, stringsAsFactors=FALSE)
 
-#nwln<- list(Hyperparameter= "maxdepth", Value = tuned.model_r2$x$maxdepth)
-#df_val_r2 = rbind(df_val_r2,nwln, stringsAsFactors=FALSE)
+nwln<- list(Obervation= "maxdepth", Value = tuned.model_r2$x$maxdepth)
+df_val_r2 = rbind(df_val_r2,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Obervation= "mse", Value = round(res_r2, digits = 3))
+df_val_r2 = rbind(df_val_r2,nwln, stringsAsFactors=FALSE)
+
+print(df_val_r2)
+
+write.csv(df_val_r2, file = "/home/mangaraj/Documents/output/df_val_r2.csv")
+write.csv(df_tune_r2, file = "/home/mangaraj/Documents/output/df_val_r2_data.csv")
 
 #---------End:Conditional Inference Trees----------------
 
@@ -285,7 +312,7 @@ getParamSet(lrn_r3)
 # Define parameters of model and search grid ~ !!!! MODEL SPECIFIC !!!!
 model.params_r3 <- makeParamSet(makeNumericParam("fw.perc",lower = 0, upper = 1),
                                 makeDiscreteParam("bprior",values = c("b0","b0not","bflat","bmle","bmznot","bmzt")),
-                                makeIntegerParam("R",      lower = 1, upper = 10),
+                                makeIntegerParam("R",      lower = 1, upper = 5),
                                 makeIntegerParam("verb",   lower = 0, upper = 4)
 )
 
@@ -323,23 +350,29 @@ res_r3<-modeltest(df_tune_r3, 'R')
 print(res_r3)
 
 #Capturing best values of hyperparameter after tuning
-df_val_r3<-data.frame(Hyperparameter=character(), Value=character())
+df_val_r3<-data.frame(Observation=character(), Value=character())
 
-nwln<- list(Hyperparameter= "No. of Features", Value = tuned.model_r3$x$fw.perc)
+nwln<- list(Observation= "No. of Features", Value = ncol(df_tune_r3))
 df_val_r3 = rbind(df_val_r3,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "bprior", Value = tuned.model_r3$x$bprior)
+nwln<- list(Observation= "fw.perc", Value = round(tuned.model_r3$x$fw.perc, digits = 3))
 df_val_r3 = rbind(df_val_r3,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "R", Value = tuned.model_r3$x$R)
+nwln<- list(Observation= "bprior", Value = tuned.model_r3$x$bprior)
 df_val_r3 = rbind(df_val_r3,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "verb", Value = tuned.model_r3$x$verb)
+nwln<- list(Observation= "R", Value = tuned.model_r3$x$R)
 df_val_r3 = rbind(df_val_r3,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "mse", Value = res_r3)
+nwln<- list(Observation= "verb", Value = tuned.model_r3$x$verb)
 df_val_r3 = rbind(df_val_r3,nwln, stringsAsFactors=FALSE)
 
+nwln<- list(Observation= "mse", Value = round(res_r3, digits = 3))
+df_val_r3 = rbind(df_val_r3,nwln, stringsAsFactors=FALSE)
+
+
+write.csv(df_val_r3, file = "/home/mangaraj/Documents/output/df_val_r3.csv")
+write.csv(df_tune_r3, file = "/home/mangaraj/Documents/output/df_val_r3_data.csv")
 
 print(df_val_r3)
 #---------End:Bayesian CART------------------------------
@@ -395,18 +428,24 @@ res_c1<-modeltest(df_tune_c1, 'C')
 print(res_c1)
 
 #Capturing best values of hyperparameter after tuning
-df_val_c1<-data.frame(Hyperparameter=character(), Value=character())
+df_val_c1<-data.frame(Observation=character(), Value=character())
 
-nwln<- list(Hyperparameter= "No. of Features", Value = tuned.model_c1$x$fw.perc)
+nwln<- list(Observation= "No. of Features", Value = (ncol(df_tune_c1)-1))
 df_val_c1 = rbind(df_val_c1,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "link", Value = tuned.model_c1$x$link)
+nwln<- list(Observation= "fw.perc", Value = round(tuned.model_c1$x$fw.perc, digits = 3))
 df_val_c1 = rbind(df_val_c1,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "Accuracy", Value = res_c1)
+nwln<- list(Observation= "link", Value = tuned.model_c1$x$link)
+df_val_c1 = rbind(df_val_c1,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Observation= "Accuracy", Value = round(res_c1,digits = 3))
 df_val_c1 = rbind(df_val_c1,nwln, stringsAsFactors=FALSE)
 
 print(df_val_c1)
+
+write.csv(df_val_c1, file = "/home/mangaraj/Documents/output/df_val_c1.csv")
+write.csv(df_tune_c1, file = "/home/mangaraj/Documents/output/df_val_c1_data.csv")
 
 #------------End of Binomial Regression------------------
 
@@ -455,24 +494,30 @@ df_tune_c2<-df_tune_c2[, names(df_tune_c2) %in% cols]
 ncol(df_tune_c2)
 
 #Getting Accuracy ~ Model training & Testing with subset of features
+res2 = double()
 res_c2<-modeltest(df_tune_c2, 'C')
 print(res_c2)
 
 #Capturing best values of hyperparameter after tuning
-df_val_c2<-data.frame(Hyperparameter=character(), Value=character())
+df_val_c2<-data.frame(Observation=character(), Value=character())
 
-nwln<- list(Hyperparameter= "No. of Features", Value = tuned.model_c2$x$fw.perc)
+nwln<- list(Observation= "No. of Features", Value = (ncol(df_tune_c2)-1))
 df_val_c2 = rbind(df_val_c2,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "k", Value = tuned.model_c2$x$k)
+nwln<- list(Observation= "fw.perc", Value = round(tuned.model_c2$x$fw.perc,digits = 3))
 df_val_c2 = rbind(df_val_c2,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "algorithm", Value = tuned.model_c2$x$algorithm)
+nwln<- list(Observation= "k", Value = tuned.model_c2$x$k)
 df_val_c2 = rbind(df_val_c2,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "Accuracy", Value = res_c2)
+nwln<- list(Observation= "algorithm", Value = tuned.model_c2$x$algorithm)
 df_val_c2 = rbind(df_val_c2,nwln, stringsAsFactors=FALSE)
 
+nwln<- list(Observation= "Accuracy", Value = res_c2)
+df_val_c2 = rbind(df_val_c2,nwln, stringsAsFactors=FALSE)
+
+write.csv(df_val_c2, file = "/home/mangaraj/Documents/output/df_val_c2.csv")
+write.csv(df_tune_c2, file = "/home/mangaraj/Documents/output/df_val_c2_data.csv")
 
 print(df_val_c2)
 
@@ -528,22 +573,28 @@ res_c3<-modeltest(df_tune_c3, 'C')
 print(res_c3)
 
 #Capturing best values of hyperparameter after tuning
-df_val_c3<-data.frame(Hyperparameter=character(), Value=character())
+df_val_c3<-data.frame(Observation=character(), Value=character())
 
-nwln<- list(Hyperparameter= "No. of Features", Value = tuned.model_c3$x$fw.perc)
+nwln<- list(Observation= "No. of Features", Value = (ncol(df_tune_c3)-1))
 df_val_c3 = rbind(df_val_c3,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "nu", Value = tuned.model_c3$x$nu)
+nwln<- list(Observation= "fw.perc", Value = round(tuned.model_c3$x$fw.perc,digits = 3))
 df_val_c3 = rbind(df_val_c3,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "tol", Value = tuned.model_c3$x$tol)
+nwln<- list(Observation= "nu", Value = round(tuned.model_c3$x$nu,digits = 3))
 df_val_c3 = rbind(df_val_c3,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "predict.method", Value = tuned.model_c3$x$predict.method)
+nwln<- list(Observation= "tol", Value = round(log(tuned.model_c3$x$tol,base = (10)),digits = 3))
 df_val_c3 = rbind(df_val_c3,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "Accuracy", Value = res_c3)
+nwln<- list(Observation= "predict.method", Value = tuned.model_c3$x$predict.method)
 df_val_c3 = rbind(df_val_c3,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Observation= "Accuracy", Value = res_c3)
+df_val_c3 = rbind(df_val_c3,nwln, stringsAsFactors=FALSE)
+
+write.csv(df_val_c3, file = "/home/mangaraj/Documents/output/df_val_c3.csv")
+write.csv(df_tune_c3, file = "/home/mangaraj/Documents/output/df_val_c3_data.csv")
 
 print(df_val_c3)
 
@@ -569,20 +620,20 @@ getParamSet(lrn_f2r1)
 
 # Define parameters of model and search grid ~ !!!! MODEL SPECIFIC !!!!
 model.params_f2r1 <- makeParamSet(
-                                  makeNumericParam("fw.perc", lower = 0, upper = 1),
-                                  makeDiscreteParam("fw.method", values = c("party_cforest.importance")),
-                                  makeIntegerParam("k",       lower = 1, upper = 10),
-                                  makeNumericParam("distance",lower = 1, upper = 10)
+  makeNumericParam("fw.perc", lower = 0, upper = 1),
+  makeDiscreteParam("fw.method", values = c("party_cforest.importance")),
+  makeIntegerParam("k",       lower = 1, upper = 10),
+  makeNumericParam("distance",lower = 1, upper = 10)
 )
-
+parallelStartSocket(5)
 # Tune model to find best performing parameter settings using random search algorithm
 tuned.model_f2r1 <- tuneParams(learner   = lrn_f2r1,
-                              task       = regr.task,
-                              resampling = cv.folds,
-                              par.set    = model.params_f2r1,
-                              control    = random.tune,
-                              show.info  = FALSE)
-
+                               task       = regr.task,
+                               resampling = cv.folds,
+                               par.set    = model.params_f2r1,
+                               control    = random.tune,
+                               show.info  = FALSE)
+parallelStop()
 #Redefining Learner with tuned parameters
 lrn_f2r1 <- makeFilterWrapper(learner   = "regr.kknn",
                               fw.method = tuned.model_f2r1$x$fw.method, 
@@ -600,32 +651,35 @@ cols<-c(cols,"response")
 View(cols)
 
 #Dataframe with selected features
-df_tune_r1<-df_samp_reg
-df_tune_r1<-df_tune_r1[, names(df_tune_r1) %in% cols] 
-ncol(df_tune_r1)
+df_tune_f2r1<-df_samp_reg
+df_tune_f2r1<-df_tune_f2r1[, names(df_tune_f2r1) %in% cols] 
+ncol(df_tune_f2r1)
 
 #Getting Accuracy ~ Model training & Testing with subset of features
 
-res_f2r1<-modeltest(df_tune_r1, 'R')
+res_f2r1<-modeltest(df_tune_f2r1, 'R')
 print(res_f2r1)
 
 #Capturing best values of hyperparameter after tuning
-df_val_f2r1<-data.frame(Hyperparameter=character(), Value=character())
+df_val_f2r1<-data.frame(Observation=character(), Value=character())
 
-nwln<- list(Hyperparameter= "No. of Features", Value = tuned.model_f2r1$x$fw.perc)
+nwln<- list(Obervation= "No. of Features", Value = (ncol(df_tune_f2r1)-1))
 df_val_f2r1 = rbind(df_val_f2r1,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "Filter Method", Value = tuned.model_f2r1$x$fw.method)
+nwln<- list(Obervation= "fw.perc", Value = (round(tuned.model_f2r1$x$fw.perc,digits = 3)))
 df_val_f2r1 = rbind(df_val_f2r1,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "k", Value = tuned.model_f2r1$x$k)
+nwln<- list(Obervation= "k", Value = tuned.model_f2r1$x$k)
 df_val_f2r1 = rbind(df_val_f2r1,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "distance", Value = tuned.model_f2r1$x$distance)
+nwln<- list(Obervation= "distance", Value = round(tuned.model_f2r1$x$distance, digits = 3))
 df_val_f2r1 = rbind(df_val_f2r1,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "mse", Value = res_f2r1)
+nwln<- list(Obervation= "mse", Value = round(res_f2r1,digits = 3))
 df_val_f2r1 = rbind(df_val_f2r1,nwln, stringsAsFactors=FALSE)
+
+write.csv(df_val_f2r1, file = "/home/mangaraj/Documents/output/df_val_f2r1.csv")
+write.csv(df_tune_f2r1, file = "/home/mangaraj/Documents/output/df_val_f2r1_data.csv")
 
 print(df_val_f2r1)
 #---------End:K-Nearest-Neighbor regressiong-------------
@@ -640,23 +694,23 @@ getParamSet(lrn_f2r2)
 
 # Define parameters of model and search grid ~ !!!! MODEL SPECIFIC !!!!
 model.params_f2r2 <- makeParamSet(makeNumericParam("fw.perc",      lower = 0, upper = 1),
-                                 makeDiscreteParam("teststat",    values = c("quad","max")),
+                                  makeDiscreteParam("teststat",    values = c("quad","max")),
                                   makeNumericParam("mincriterion", lower = 0, upper = 1),
                                   makeIntegerParam("minsplit",     lower = 1, upper = 50), #remove cmt for org data
-                                  makeIntegerParam("minbucket",    lower = 1, upper = 10)
-                                 #makeIntegerParam("maxsurrogate", lower = 0, upper = 10)
-                                #makeIntegerParam("mtry",         lower = 0, upper = 5)
-                                #makeIntegerParam("maxdepth",     lower = 0, upper = 10)
+                                  makeIntegerParam("minbucket",    lower = 1, upper = 10),
+                                  makeIntegerParam("maxsurrogate", lower = 0, upper = 10),
+                                  makeIntegerParam("mtry",         lower = 0, upper = 5),
+                                  makeIntegerParam("maxdepth",     lower = 0, upper = 10)
 )
-
+parallelStartSocket(5)
 # Tune model to find best performing parameter settings using random search algorithm
 tuned.model_f2r2 <- tuneParams(learner  = lrn_f2r2,
-                             task       = regr.task,
-                             resampling = cv.folds,
-                             par.set    = model.params_f2r2,
-                             control    = random.tune,
-                             show.info  = FALSE)
-
+                               task       = regr.task,
+                               resampling = cv.folds,
+                               par.set    = model.params_f2r2,
+                               control    = random.tune,
+                               show.info  = FALSE)
+parallelStop()
 #Redefining Learner with tuned parameters
 lrn_f2r2 <- makeFilterWrapper(learner   = "regr.ctree",
                               fw.method = "party_cforest.importance", 
@@ -674,44 +728,52 @@ cols<-c(cols,"response")
 View(cols)
 
 #Dataframe with selected features
-df_tune_r2<-df_samp_reg
-df_tune_r2<-df_tune_r2[, names(df_tune_r2) %in% cols] 
-ncol(df_tune_r2)
+df_tune_f2r2<-df_samp_reg
+df_tune_f2r2<-df_tune_f2r2[, names(df_tune_f2r2) %in% cols] 
+ncol(df_tune_f2r2)
 
 #Getting Accuracy ~ Model training & Testing with subset of features
 
-res_f2r2<-modeltest(df_tune_r2, 'R')
+res_f2r2<-modeltest(df_tune_f2r2, 'R')
 print(res_f2r2)
 
 #Capturing best values of hyperparameter after tuning
-df_val_f2r2<-data.frame(Hyperparameter=character(), Value=character())
+df_val_f2r2<-data.frame(Observation=character(), Value=character())
 
-nwln<- list(Hyperparameter= "No. of Features", Value = tuned.model_f2r2$x$fw.perc)
+nwln<- list(Obervation= "No. of Features", Value = (ncol(df_tune_f2r2)-1))
 df_val_f2r2 = rbind(df_val_f2r2,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "teststat", Value = tuned.model_f2r2$x$teststat)
+nwln<- list(Obervation= "fw.perc", Value = round(tuned.model_f2r2$x$fw.perc, digits = 3))
 df_val_f2r2 = rbind(df_val_f2r2,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "mincriterion", Value = tuned.model_f2r2$x$mincriterion)
+nwln<- list(Obervation= "teststat", Value = tuned.model_f2r2$x$teststat)
 df_val_f2r2 = rbind(df_val_f2r2,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "minsplit", Value = tuned.model_f2r2$x$minsplit)
+nwln<- list(Obervation= "mincriterion", Value = round(tuned.model_f2r2$x$mincriterion,digits = 3))
 df_val_f2r2 = rbind(df_val_f2r2,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "minbucket", Value = tuned.model_f2r2$x$minbucket)
+nwln<- list(Obervation= "minsplit", Value = tuned.model_f2r2$x$minsplit)
 df_val_f2r2 = rbind(df_val_f2r2,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "mse", Value = res_f2r2)
+nwln<- list(Obervation= "minbucket", Value = tuned.model_f2r2$x$minbucket)
 df_val_f2r2 = rbind(df_val_f2r2,nwln, stringsAsFactors=FALSE)
 
-#nwln<- list(Hyperparameter= "maxsurrogate", Value = tuned.model_f2r2$x$maxsurrogate)
-#df_val_f2r2 = rbind(df_val_f2r2,nwln, stringsAsFactors=FALSE)
+nwln<- list(Obervation= "maxsurrogate", Value = tuned.model_f2r2$x$maxsurrogate)
+df_val_f2r2 = rbind(df_val_f2r2,nwln, stringsAsFactors=FALSE)
 
-#nwln<- list(Hyperparameter= "mtry", Value = tuned.model_f2r2$x$mtry)
-#df_val_f2r2 = rbind(df_val_f2r2,nwln, stringsAsFactors=FALSE)
+nwln<- list(Obervation= "mtry", Value = tuned.model_f2r2$x$mtry)
+df_val_f2r2 = rbind(df_val_f2r2,nwln, stringsAsFactors=FALSE)
 
-#nwln<- list(Hyperparameter= "maxdepth", Value = tuned.model_f2r2$x$maxdepth)
-#df_val_f2r2 = rbind(df_val_f2r2,nwln, stringsAsFactors=FALSE)
+nwln<- list(Obervation= "maxdepth", Value = tuned.model_f2r2$x$maxdepth)
+df_val_f2r2 = rbind(df_val_f2r2,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Obervation= "mse", Value = round(res_f2r2, digits = 3))
+df_val_f2r2 = rbind(df_val_f2r2,nwln, stringsAsFactors=FALSE)
+
+print(df_val_f2r2)
+
+write.csv(df_val_f2r2, file = "/home/mangaraj/Documents/output/df_val_f2r2.csv")
+write.csv(df_tune_f2r2, file = "/home/mangaraj/Documents/output/df_val_f2r2_data.csv")
 
 #---------End:Conditional Inference Trees----------------
 
@@ -725,24 +787,24 @@ getParamSet(lrn_f2r3)
 
 # Define parameters of model and search grid ~ !!!! MODEL SPECIFIC !!!!
 model.params_f2r3 <- makeParamSet(makeNumericParam("fw.perc",lower = 0, upper = 1),
-                                 makeDiscreteParam("bprior",values = c("b0","b0not","bflat","bmle","bmznot","bmzt")),
-                                  makeIntegerParam("R",      lower = 1, upper = 10),
+                                  makeDiscreteParam("bprior",values = c("b0","b0not","bflat","bmle","bmznot","bmzt")),
+                                  makeIntegerParam("R",      lower = 1, upper = 5),
                                   makeIntegerParam("verb",   lower = 0, upper = 4)
 )
 
 # Tune model to find best performing parameter settings using random search algorithm
 tuned.model_f2r3 <- tuneParams(learner  = lrn_f2r3,
-                             task       = regr.task,
-                             resampling = cv.folds,
-                             par.set    = model.params_f2r3,
-                             control    = random.tune,
-                             show.info  = FALSE)
+                               task       = regr.task,
+                               resampling = cv.folds,
+                               par.set    = model.params_f2r3,
+                               control    = random.tune,
+                               show.info  = FALSE)
 
 #Redefining Learner with tuned parameters
 lrn_f2r3 <- makeFilterWrapper(learner = "regr.bcart",
-                            fw.method = "party_cforest.importance", 
-                            fw.perc   = tuned.model_f2r3$x$fw.perc, 
-                            par.set   = tuned.model_f2r3 )
+                              fw.method = "party_cforest.importance", 
+                              fw.perc   = tuned.model_f2r3$x$fw.perc, 
+                              par.set   = tuned.model_f2r3 )
 
 #Training of model to extract features
 mod_r3<-mlr::train(lrn_f2r3,regr.task)
@@ -755,33 +817,39 @@ cols<-c(cols,"response")
 View(cols)
 
 #Dataframe with selected features
-df_tune_r3<-df_samp_reg
-df_tune_r3<-df_tune_r3[, names(df_tune_r3) %in% cols] 
-ncol(df_tune_r3)
+df_tune_f2r3<-df_samp_reg
+df_tune_f2r3<-df_tune_f2r3[, names(df_tune_f2r3) %in% cols] 
+ncol(df_tune_f2r3)
 
 #Getting Accuracy ~ Model training & Testing with subset of features
-res_f2r3<-modeltest(df_tune_r3, 'R')
+res_f2r3<-modeltest(df_tune_f2r3, 'R')
 print(res_f2r3)
 
 #Capturing best values of hyperparameter after tuning
-df_val_f2r3<-data.frame(Hyperparameter=character(), Value=character())
+df_val_f2r3<-data.frame(Observation=character(), Value=character())
 
-nwln<- list(Hyperparameter= "No. of Features", Value = tuned.model_f2r3$x$fw.perc)
+nwln<- list(Observation= "No. of Features", Value = (ncol(df_tune_f2r3)-1))
 df_val_f2r3 = rbind(df_val_f2r3,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "bprior", Value = tuned.model_f2r3$x$bprior)
+nwln<- list(Observation= "fw.perc", Value = round(tuned.model_f2r3$x$fw.perc, digits = 3))
 df_val_f2r3 = rbind(df_val_f2r3,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "R", Value = tuned.model_f2r3$x$R)
+nwln<- list(Observation= "bprior", Value = tuned.model_f2r3$x$bprior)
 df_val_f2r3 = rbind(df_val_f2r3,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "verb", Value = tuned.model_f2r3$x$verb)
+nwln<- list(Observation= "R", Value = tuned.model_f2r3$x$R)
 df_val_f2r3 = rbind(df_val_f2r3,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "mse", Value = res_f2r3)
+nwln<- list(Observation= "verb", Value = tuned.model_f2r3$x$verb)
+df_val_f2r3 = rbind(df_val_f2r3,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Observation= "mse", Value = round(res_f2r3, digits = 3))
 df_val_f2r3 = rbind(df_val_f2r3,nwln, stringsAsFactors=FALSE)
 
 print(df_val_f2r3)
+
+write.csv(df_val_f2r3, file = "/home/mangaraj/Documents/output/df_val_f2r3.csv")
+write.csv(df_tune_f2r3, file = "/home/mangaraj/Documents/output/df_val_f2r3_data.csv")
 #---------End:Bayesian CART------------------------------
 
 ##CLASSIFICATION
@@ -796,24 +864,23 @@ lrn_f2c1 <- makeFilterWrapper("classif.binomial", fw.method = "party_cforest.imp
 getParamSet(lrn_f2c1)
 
 # Define parameters of model and search grid ~ !!!! MODEL SPECIFIC !!!!
-model.params_f2c1 <- makeParamSet(makeNumericParam("fw.perc",lower = 0, upper = 1),
-                                   makeDiscreteParam("link",values = c("logit","probit","cloglog","cauchit","log"))
-                                
+model.params_f2c1 <- makeParamSet(makeNumericParam("fw.perc",lower = 0, upper = 1)
+                                  #makeDiscreteParam("link",values = c("logit","probit","cloglog","cauchit","log"))
+                                  
 )
 
 # Tune model to find best performing parameter settings using random search algorithm
 tuned.model_f2c1 <- tuneParams(learner  = lrn_f2c1,
-                             task       = clsf.task,
-                             resampling = cv.folds,
-                             par.set    = model.params_f2c1,
-                             control    = random.tune,
-                             show.info  = FALSE)
+                               task       = clsf.task,
+                               resampling = cv.folds,
+                               par.set    = model.params_f2c1,
+                               control    = random.tune)
 
 #Redefining Learner with tuned parameters
 lrn_f2c1 <- makeFilterWrapper(learner   = "classif.binomial",
-                            fw.method = "party_cforest.importance", 
-                            fw.perc   = tuned.model_f2c1$x$fw.perc, 
-                            par.set   = tuned.model_f2c1 )
+                              fw.method = "party_cforest.importance", 
+                              fw.perc   = tuned.model_f2c1$x$fw.perc, 
+                              par.set   = tuned.model_f2c1 )
 
 #Training of model to extract features
 mod_c1<-mlr::train(lrn_f2c1,clsf.task)
@@ -826,27 +893,30 @@ cols<-c(cols,"response")
 View(cols)
 
 #Dataframe with selected features
-df_tune_c1<-df_samp_cls
-df_tune_c1<-df_tune_c1[, names(df_tune_c1) %in% cols] 
-ncol(df_tune_c1)
+df_tune_f2c1<-df_samp_cls
+df_tune_f2c1<-df_tune_f2c1[, names(df_tune_f2c1) %in% cols] 
+ncol(df_tune_f2c1)
 
 #Getting Accuracy ~ Model training & Testing with subset of features
-res_f2c1<-modeltest(df_tune_c1, 'C')
+res_f2c1<-modeltest(df_tune_f2c1, 'C')
 print(res_f2c1)
 
 #Capturing best values of hyperparameter after tuning
-df_val_f2c1<-data.frame(Hyperparameter=character(), Value=character())
+df_val_f2c1<-data.frame(Observation=character(), Value=character())
 
-nwln<- list(Hyperparameter= "No. of Features", Value = tuned.model_f2c1$x$fw.perc)
+nwln<- list(Observation= "No. of Features", Value = (ncol(df_tune_f2c1)-1))
 df_val_f2c1 = rbind(df_val_f2c1,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "link", Value = tuned.model_f2c1$x$link)
+nwln<- list(Observation= "fw.perc", Value = round(tuned.model_f2c1$x$fw.perc, digits = 3))
 df_val_f2c1 = rbind(df_val_f2c1,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "Accuracy", Value = res_f2c1)
+nwln<- list(Observation= "Accuracy", Value = round(res_f2c1,digits = 3))
 df_val_f2c1 = rbind(df_val_f2c1,nwln, stringsAsFactors=FALSE)
 
 print(df_val_f2c1)
+
+write.csv(df_val_f2c1, file = "/home/mangaraj/Documents/output/df_val_f2c1.csv")
+write.csv(df_tune_f2c1, file = "/home/mangaraj/Documents/output/df_val_f2c1_data.csv")
 
 #------------End of Binomial Regression------------------
 
@@ -861,23 +931,23 @@ getParamSet(lrn_f2c2)
 # Define parameters of model and search grid ~ !!!! MODEL SPECIFIC !!!!
 model.params_f2c2 <- makeParamSet(makeNumericParam("fw.perc",lower = 0, upper = 1),
                                   makeIntegerParam( "k",     lower = 1, upper = 10),
-                              makeDiscreteParam("algorithm",values = c("cover_tree","kd_tree","brute"))
-                                
+                                  makeDiscreteParam("algorithm",values = c("cover_tree","kd_tree","brute"))
+                                  
 )
 
 # Tune model to find best performing parameter settings using random search algorithm
 tuned.model_f2c2 <- tuneParams(learner  = lrn_f2c2,
-                             task       = clsf.task,
-                             resampling = cv.folds,
-                             par.set    = model.params_f2c2,
-                             control    = random.tune,
-                             show.info  = FALSE)
+                               task       = clsf.task,
+                               resampling = cv.folds,
+                               par.set    = model.params_f2c2,
+                               control    = random.tune,
+                               show.info  = FALSE)
 
 #Redefining Learner with tuned parameters
 lrn_f2c2 <- makeFilterWrapper(learner   = "classif.fnn",
-                            fw.method = "party_cforest.importance", 
-                            fw.perc   = tuned.model_f2c2$x$fw.perc, 
-                            par.set   = tuned.model_f2c2 )
+                              fw.method = "party_cforest.importance", 
+                              fw.perc   = tuned.model_f2c2$x$fw.perc, 
+                              par.set   = tuned.model_f2c2 )
 
 #Training of model to extract features
 mod_c2<-mlr::train(lrn_f2c2,clsf.task)
@@ -890,30 +960,36 @@ cols<-c(cols,"response")
 View(cols)
 
 #Dataframe with selected features
-df_tune_c2<-df_samp_cls
-df_tune_c2<-df_tune_c2[, names(df_tune_c2) %in% cols] 
-ncol(df_tune_c2)
+df_tune_f2c2<-df_samp_cls
+df_tune_f2c2<-df_tune_f2c2[, names(df_tune_f2c2) %in% cols] 
+ncol(df_tune_f2c2)
 
 #Getting Accuracy ~ Model training & Testing with subset of features
-res_f2c2<-modeltest(df_tune_c2, 'C')
+res_f2c2<-modeltest(df_tune_f2c2, 'C')
 print(res_f2c2)
 
 #Capturing best values of hyperparameter after tuning
-df_val_f2c2<-data.frame(Hyperparameter=character(), Value=character())
+df_val_f2c2<-data.frame(Observation=character(), Value=character())
 
-nwln<- list(Hyperparameter= "No. of Features", Value = tuned.model_f2c2$x$fw.perc)
+nwln<- list(Observation= "No. of Features", Value = (ncol(df_tune_f2c2)-1))
 df_val_f2c2 = rbind(df_val_f2c2,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "k", Value = tuned.model_f2c2$x$k)
+nwln<- list(Observation= "fw.perc", Value = round(tuned.model_f2c2$x$fw.perc,digits = 3))
 df_val_f2c2 = rbind(df_val_f2c2,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "algorithm", Value = tuned.model_f2c2$x$algorithm)
+nwln<- list(Observation= "k", Value = tuned.model_f2c2$x$k)
 df_val_f2c2 = rbind(df_val_f2c2,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "Accuracy", Value = res_f2c2)
+nwln<- list(Observation= "algorithm", Value = tuned.model_f2c2$x$algorithm)
+df_val_f2c2 = rbind(df_val_f2c2,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Observation= "Accuracy", Value = res_f2c2)
 df_val_f2c2 = rbind(df_val_f2c2,nwln, stringsAsFactors=FALSE)
 
 print(df_val_f2c2)
+
+write.csv(df_val_f2c2, file = "/home/mangaraj/Documents/output/df_val_f2c2.csv")
+write.csv(df_tune_f2c2, file = "/home/mangaraj/Documents/output/df_val_f2c2_data.csv")
 
 #------------End of Fast k-Nearest Neighbour-------------
 
@@ -929,23 +1005,23 @@ getParamSet(lrn_f2c3)
 model.params_f2c3 <- makeParamSet(makeNumericParam("fw.perc", lower = 0, upper = 1),
                                   makeNumericParam( "nu",     lower = 2, upper = 10),
                                   makeNumericParam( "tol",    lower = 0, upper = 0.0005),
-                                makeDiscreteParam("predict.method",values = c("plug-in","predictive","debiased"))
-                                
+                                  makeDiscreteParam("predict.method",values = c("plug-in","predictive","debiased"))
+                                  
 )
 
 # Tune model to find best performing parameter settings using random search algorithm
 tuned.model_f2c3 <- tuneParams(learner  = lrn_f2c3,
-                             task       = clsf.task,
-                             resampling = cv.folds,
-                             par.set    = model.params_f2c3,
-                             control    = random.tune,
-                             show.info  = FALSE)
+                               task       = clsf.task,
+                               resampling = cv.folds,
+                               par.set    = model.params_f2c3,
+                               control    = random.tune,
+                               show.info  = FALSE)
 
 #Redefining Learner with tuned parameters
 lrn_f2c3 <- makeFilterWrapper(learner = "classif.lda",
-                            fw.method = "party_cforest.importance", 
-                            fw.perc   = tuned.model_f2c3$x$fw.perc, 
-                            par.set   = tuned.model_f2c3 )
+                              fw.method = "party_cforest.importance", 
+                              fw.perc   = tuned.model_f2c3$x$fw.perc, 
+                              par.set   = tuned.model_f2c3 )
 
 #Training of model to extract features
 mod_c3<-mlr::train(lrn_f2c3,clsf.task)
@@ -958,33 +1034,39 @@ cols<-c(cols,"response")
 View(cols)
 
 #Dataframe with selected features
-df_tune_c3<-df_samp_cls
-df_tune_c3<-df_tune_c3[, names(df_tune_c3) %in% cols] 
-ncol(df_tune_c3)
+df_tune_f2c3<-df_samp_cls
+df_tune_f2c3<-df_tune_f2c3[, names(df_tune_f2c3) %in% cols] 
+ncol(df_tune_f2c3)
 
 #Getting Accuracy ~ Model training & Testing with subset of features
-res_f2c3<-modeltest(df_tune_c3, 'C')
+res_f2c3<-modeltest(df_tune_f2c3, 'C')
 print(res_f2c3)
 
 #Capturing best values of hyperparameter after tuning
-df_val_f2c3<-data.frame(Hyperparameter=character(), Value=character())
+df_val_f2c3<-data.frame(Observation=character(), Value=character())
 
-nwln<- list(Hyperparameter= "No. of Features", Value = tuned.model_f2c3$x$fw.perc)
+nwln<- list(Observation= "No. of Features", Value = (ncol(df_tune_f2c3)-1))
 df_val_f2c3 = rbind(df_val_f2c3,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "nu", Value = tuned.model_f2c3$x$nu)
+nwln<- list(Observation= "fw.perc", Value = round(tuned.model_f2c3$x$fw.perc,digits = 3))
 df_val_f2c3 = rbind(df_val_f2c3,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "tol", Value = tuned.model_f2c3$x$tol)
+nwln<- list(Observation= "nu", Value = round(tuned.model_f2c3$x$nu,digits = 3))
 df_val_f2c3 = rbind(df_val_f2c3,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "predict.method", Value = tuned.model_f2c3$x$predict.method)
+nwln<- list(Observation= "tol", Value = round(log(tuned.model_f2c3$x$tol,base = (10)),digits = 3))
 df_val_f2c3 = rbind(df_val_f2c3,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "Accuracy", Value = res_f2c3)
+nwln<- list(Observation= "predict.method", Value = tuned.model_f2c3$x$predict.method)
+df_val_f2c3 = rbind(df_val_f2c3,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Observation= "Accuracy", Value = res_f2c3)
 df_val_f2c3 = rbind(df_val_f2c3,nwln, stringsAsFactors=FALSE)
 
 print(df_val_f2c3)
+
+write.csv(df_val_f2c3, file = "/home/mangaraj/Documents/output/df_val_f2c3.csv")
+write.csv(df_tune_f2c3, file = "/home/mangaraj/Documents/output/df_val_f2c3_data.csv")
 
 #------------End of Fast k-Nearest Neighbour-------------
 #------------End of party_cforest.importance-------------
@@ -1011,6 +1093,7 @@ model.params_f3r1 <- makeParamSet(
   makeNumericParam("distance",lower = 1, upper = 10)
 )
 
+parallelStartSocket(5)
 # Tune model to find best performing parameter settings using random search algorithm
 tuned.model_f3r1 <- tuneParams(learner   = lrn_f3r1,
                                task       = regr.task,
@@ -1018,7 +1101,7 @@ tuned.model_f3r1 <- tuneParams(learner   = lrn_f3r1,
                                par.set    = model.params_f3r1,
                                control    = random.tune,
                                show.info  = FALSE)
-
+parallelStop()
 #Redefining Learner with tuned parameters
 lrn_f3r1 <- makeFilterWrapper(learner   = "regr.kknn",
                               fw.method = tuned.model_f3r1$x$fw.method, 
@@ -1036,32 +1119,35 @@ cols<-c(cols,"response")
 View(cols)
 
 #Dataframe with selected features
-df_tune_r1<-df_samp_reg
-df_tune_r1<-df_tune_r1[, names(df_tune_r1) %in% cols] 
-ncol(df_tune_r1)
+df_tune_f3r1<-df_samp_reg
+df_tune_f3r1<-df_tune_f3r1[, names(df_tune_f3r1) %in% cols] 
+ncol(df_tune_f3r1)
 
 #Getting Accuracy ~ Model training & Testing with subset of features
 
-res_f3r1<-modeltest(df_tune_r1, 'R')
+res_f3r1<-modeltest(df_tune_f3r1, 'R')
 print(res_f3r1)
 
 #Capturing best values of hyperparameter after tuning
-df_val_f3r1<-data.frame(Hyperparameter=character(), Value=character())
+df_val_f3r1<-data.frame(Observation=character(), Value=character())
 
-nwln<- list(Hyperparameter= "No. of Features", Value = tuned.model_f3r1$x$fw.perc)
+nwln<- list(Obervation= "No. of Features", Value = (ncol(df_tune_f3r1)-1))
 df_val_f3r1 = rbind(df_val_f3r1,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "Filter Method", Value = tuned.model_f3r1$x$fw.method)
+nwln<- list(Obervation= "fw.perc", Value = (round(tuned.model_f3r1$x$fw.perc,digits = 3)))
 df_val_f3r1 = rbind(df_val_f3r1,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "k", Value = tuned.model_f3r1$x$k)
+nwln<- list(Obervation= "k", Value = tuned.model_f3r1$x$k)
 df_val_f3r1 = rbind(df_val_f3r1,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "distance", Value = tuned.model_f3r1$x$distance)
+nwln<- list(Obervation= "distance", Value = round(tuned.model_f3r1$x$distance, digits = 3))
 df_val_f3r1 = rbind(df_val_f3r1,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "mse", Value = res_f3r1)
+nwln<- list(Obervation= "mse", Value = round(res_f3r1,digits = 3))
 df_val_f3r1 = rbind(df_val_f3r1,nwln, stringsAsFactors=FALSE)
+
+write.csv(df_val_f3r1, file = "/home/mangaraj/Documents/output/df_val_f3r1.csv")
+write.csv(df_tune_f3r1, file = "/home/mangaraj/Documents/output/df_val_f3r1_data.csv")
 
 print(df_val_f3r1)
 #---------End:K-Nearest-Neighbor regressiong-------------
@@ -1079,12 +1165,12 @@ model.params_f3r2 <- makeParamSet(makeNumericParam("fw.perc",      lower = 0, up
                                   makeDiscreteParam("teststat",    values = c("quad","max")),
                                   makeNumericParam("mincriterion", lower = 0, upper = 1),
                                   makeIntegerParam("minsplit",     lower = 1, upper = 50), #remove cmt for org data
-                                  makeIntegerParam("minbucket",    lower = 1, upper = 10)
-                                  #makeIntegerParam("maxsurrogate", lower = 0, upper = 10)
-                                  #makeIntegerParam("mtry",         lower = 0, upper = 5)
-                                  #makeIntegerParam("maxdepth",     lower = 0, upper = 10)
+                                  makeIntegerParam("minbucket",    lower = 1, upper = 10),
+                                  makeIntegerParam("maxsurrogate", lower = 0, upper = 10),
+                                  makeIntegerParam("mtry",         lower = 0, upper = 5),
+                                  makeIntegerParam("maxdepth",     lower = 0, upper = 10)
 )
-
+parallelStartSocket(5)
 # Tune model to find best performing parameter settings using random search algorithm
 tuned.model_f3r2 <- tuneParams(learner  = lrn_f3r2,
                                task       = regr.task,
@@ -1092,7 +1178,7 @@ tuned.model_f3r2 <- tuneParams(learner  = lrn_f3r2,
                                par.set    = model.params_f3r2,
                                control    = random.tune,
                                show.info  = FALSE)
-
+parallelStop()
 #Redefining Learner with tuned parameters
 lrn_f3r2 <- makeFilterWrapper(learner   = "regr.ctree",
                               fw.method = "FSelectorRcpp_information.gain", 
@@ -1110,44 +1196,52 @@ cols<-c(cols,"response")
 View(cols)
 
 #Dataframe with selected features
-df_tune_r2<-df_samp_reg
-df_tune_r2<-df_tune_r2[, names(df_tune_r2) %in% cols] 
-ncol(df_tune_r2)
+df_tune_f3r2<-df_samp_reg
+df_tune_f3r2<-df_tune_f3r2[, names(df_tune_f3r2) %in% cols] 
+ncol(df_tune_f3r2)
 
 #Getting Accuracy ~ Model training & Testing with subset of features
 
-res_f3r2<-modeltest(df_tune_r2, 'R')
+res_f3r2<-modeltest(df_tune_f3r2, 'R')
 print(res_f3r2)
 
 #Capturing best values of hyperparameter after tuning
-df_val_f3r2<-data.frame(Hyperparameter=character(), Value=character())
+df_val_f3r2<-data.frame(Observation=character(), Value=character())
 
-nwln<- list(Hyperparameter= "No. of Features", Value = tuned.model_f3r2$x$fw.perc)
+nwln<- list(Obervation= "No. of Features", Value = (ncol(df_tune_f3r2)-1))
 df_val_f3r2 = rbind(df_val_f3r2,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "teststat", Value = tuned.model_f3r2$x$teststat)
+nwln<- list(Obervation= "fw.perc", Value = round(tuned.model_f3r2$x$fw.perc, digits = 3))
 df_val_f3r2 = rbind(df_val_f3r2,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "mincriterion", Value = tuned.model_f3r2$x$mincriterion)
+nwln<- list(Obervation= "teststat", Value = tuned.model_f3r2$x$teststat)
 df_val_f3r2 = rbind(df_val_f3r2,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "minsplit", Value = tuned.model_f3r2$x$minsplit)
+nwln<- list(Obervation= "mincriterion", Value = round(tuned.model_f3r2$x$mincriterion,digits = 3))
 df_val_f3r2 = rbind(df_val_f3r2,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "minbucket", Value = tuned.model_f3r2$x$minbucket)
+nwln<- list(Obervation= "minsplit", Value = tuned.model_f3r2$x$minsplit)
 df_val_f3r2 = rbind(df_val_f3r2,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "mse", Value = res_f3r2)
+nwln<- list(Obervation= "minbucket", Value = tuned.model_f3r2$x$minbucket)
 df_val_f3r2 = rbind(df_val_f3r2,nwln, stringsAsFactors=FALSE)
 
-#nwln<- list(Hyperparameter= "maxsurrogate", Value = tuned.model_f3r2$x$maxsurrogate)
-#df_val_f3r2 = rbind(df_val_f3r2,nwln, stringsAsFactors=FALSE)
+nwln<- list(Obervation= "maxsurrogate", Value = tuned.model_f3r2$x$maxsurrogate)
+df_val_f3r2 = rbind(df_val_f3r2,nwln, stringsAsFactors=FALSE)
 
-#nwln<- list(Hyperparameter= "mtry", Value = tuned.model_f3r2$x$mtry)
-#df_val_f3r2 = rbind(df_val_f3r2,nwln, stringsAsFactors=FALSE)
+nwln<- list(Obervation= "mtry", Value = tuned.model_f3r2$x$mtry)
+df_val_f3r2 = rbind(df_val_f3r2,nwln, stringsAsFactors=FALSE)
 
-#nwln<- list(Hyperparameter= "maxdepth", Value = tuned.model_f3r2$x$maxdepth)
-#df_val_f3r2 = rbind(df_val_f3r2,nwln, stringsAsFactors=FALSE)
+nwln<- list(Obervation= "maxdepth", Value = tuned.model_f3r2$x$maxdepth)
+df_val_f3r2 = rbind(df_val_f3r2,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Obervation= "mse", Value = round(res_f3r2, digits = 3))
+df_val_f3r2 = rbind(df_val_f3r2,nwln, stringsAsFactors=FALSE)
+
+print(df_val_f3r2)
+
+write.csv(df_val_f3r2, file = "/home/mangaraj/Documents/output/df_val_f3r2.csv")
+write.csv(df_tune_f3r2, file = "/home/mangaraj/Documents/output/df_val_f3r2_data.csv")
 
 #---------End:Conditional Inference Trees----------------
 
@@ -1162,7 +1256,7 @@ getParamSet(lrn_f3r3)
 # Define parameters of model and search grid ~ !!!! MODEL SPECIFIC !!!!
 model.params_f3r3 <- makeParamSet(makeNumericParam("fw.perc",lower = 0, upper = 1),
                                   makeDiscreteParam("bprior",values = c("b0","b0not","bflat","bmle","bmznot","bmzt")),
-                                  makeIntegerParam("R",      lower = 1, upper = 10),
+                                  makeIntegerParam("R",      lower = 1, upper = 5),
                                   makeIntegerParam("verb",   lower = 0, upper = 4)
 )
 
@@ -1191,33 +1285,39 @@ cols<-c(cols,"response")
 View(cols)
 
 #Dataframe with selected features
-df_tune_r3<-df_samp_reg
-df_tune_r3<-df_tune_r3[, names(df_tune_r3) %in% cols] 
-ncol(df_tune_r3)
+df_tune_f3r3<-df_samp_reg
+df_tune_f3r3<-df_tune_f3r3[, names(df_tune_f3r3) %in% cols] 
+ncol(df_tune_f3r3)
 
 #Getting Accuracy ~ Model training & Testing with subset of features
-res_f3r3<-modeltest(df_tune_r3, 'R')
+res_f3r3<-modeltest(df_tune_f3r3, 'R')
 print(res_f3r3)
 
 #Capturing best values of hyperparameter after tuning
-df_val_f3r3<-data.frame(Hyperparameter=character(), Value=character())
+df_val_f3r3<-data.frame(Observation=character(), Value=character())
 
-nwln<- list(Hyperparameter= "No. of Features", Value = tuned.model_f3r3$x$fw.perc)
+nwln<- list(Observation= "No. of Features", Value = (ncol(df_tune_f3r3)-1))
 df_val_f3r3 = rbind(df_val_f3r3,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "bprior", Value = tuned.model_f3r3$x$bprior)
+nwln<- list(Observation= "fw.perc", Value = round(tuned.model_f2r3$x$fw.perc, digits = 3))
 df_val_f3r3 = rbind(df_val_f3r3,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "R", Value = tuned.model_f3r3$x$R)
+nwln<- list(Observation= "bprior", Value = tuned.model_f2r3$x$bprior)
 df_val_f3r3 = rbind(df_val_f3r3,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "verb", Value = tuned.model_f3r3$x$verb)
+nwln<- list(Observation= "R", Value = tuned.model_f2r3$x$R)
 df_val_f3r3 = rbind(df_val_f3r3,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "mse", Value = res_f3r3)
+nwln<- list(Observation= "verb", Value = tuned.model_f2r3$x$verb)
+df_val_f3r3 = rbind(df_val_f3r3,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Observation= "mse", Value = round(res_f3r3, digits = 3))
 df_val_f3r3 = rbind(df_val_f3r3,nwln, stringsAsFactors=FALSE)
 
 print(df_val_f3r3)
+
+write.csv(df_val_f3r3, file = "/home/mangaraj/Documents/output/df_val_f3r3.csv")
+write.csv(df_tune_f3r3, file = "/home/mangaraj/Documents/output/df_val_f3r3_data.csv")
 #---------End:Bayesian CART------------------------------
 
 ##CLASSIFICATION
@@ -1232,8 +1332,8 @@ lrn_f3c1 <- makeFilterWrapper("classif.binomial", fw.method = "FSelectorRcpp_inf
 getParamSet(lrn_f3c1)
 
 # Define parameters of model and search grid ~ !!!! MODEL SPECIFIC !!!!
-model.params_f3c1 <- makeParamSet(makeNumericParam("fw.perc",lower = 0, upper = 1),
-                                  makeDiscreteParam("link",values = c("logit","probit","cloglog","cauchit","log"))
+model.params_f3c1 <- makeParamSet(makeNumericParam("fw.perc",lower = 0, upper = 1)
+                                  #makeDiscreteParam("link",values = c("logit","probit","cloglog","cauchit","log"))
                                   
 )
 
@@ -1242,8 +1342,7 @@ tuned.model_f3c1 <- tuneParams(learner    = lrn_f3c1,
                                task       = clsf.task,
                                resampling = cv.folds,
                                par.set    = model.params_f3c1,
-                               control    = random.tune,
-                               show.info  = FALSE)
+                               control    = random.tune)
 
 #Redefining Learner with tuned parameters
 lrn_f3c1 <- makeFilterWrapper(learner   = "classif.binomial",
@@ -1262,27 +1361,30 @@ cols<-c(cols,"response")
 print(cols)
 
 #Dataframe with selected features
-df_tune_c1<-df_samp_cls
-df_tune_c1<-df_tune_c1[, names(df_tune_c1) %in% cols] 
-print(ncol(df_tune_c1))
+df_tune_f3c1<-df_samp_cls
+df_tune_f3c1<-df_tune_f3c1[, names(df_tune_f3c1) %in% cols] 
+print(ncol(df_tune_f3c1))
 
 #Getting Accuracy ~ Model training & Testing with subset of features
-res_f3c1<-modeltest(df_tune_c1, 'C')
+res_f3c1<-modeltest(df_tune_f3c1, 'C')
 print(res_f3c1)
 
 #Capturing best values of hyperparameter after tuning
-df_val_f3c1<-data.frame(Hyperparameter=character(), Value=character())
+df_val_f3c1<-data.frame(Observation=character(), Value=character())
 
-nwln<- list(Hyperparameter= "No. of Features", Value = tuned.model_f3c1$x$fw.perc)
+nwln<- list(Observation= "No. of Features", Value = (ncol(df_tune_f3c1)-1))
 df_val_f3c1 = rbind(df_val_f3c1,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "link", Value = tuned.model_f3c1$x$link)
+nwln<- list(Observation= "fw.perc", Value = round(tuned.model_f3c1$x$fw.perc, digits = 3))
 df_val_f3c1 = rbind(df_val_f3c1,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "Accuracy", Value = res_f3c1)
+nwln<- list(Observation= "Accuracy", Value = round(res_f3c1,digits = 3))
 df_val_f3c1 = rbind(df_val_f3c1,nwln, stringsAsFactors=FALSE)
 
 print(df_val_f3c1)
+
+write.csv(df_val_f3c1, file = "/home/mangaraj/Documents/output/df_val_f3c1.csv")
+write.csv(df_tune_f3c1, file = "/home/mangaraj/Documents/output/df_val_f3c1_data.csv")
 
 #------------End of Binomial Regression------------------
 
@@ -1326,30 +1428,36 @@ cols<-c(cols,"response")
 View(cols)
 
 #Dataframe with selected features
-df_tune_c2<-df_samp_cls
-df_tune_c2<-df_tune_c2[, names(df_tune_c2) %in% cols] 
-ncol(df_tune_c2)
+df_tune_f3c2<-df_samp_cls
+df_tune_f3c2<-df_tune_f3c2[, names(df_tune_f3c2) %in% cols] 
+ncol(df_tune_f3c2)
 
 #Getting Accuracy ~ Model training & Testing with subset of features
-res_f3c2<-modeltest(df_tune_c2, 'C')
+res_f3c2<-modeltest(df_tune_f3c2, 'C')
 print(res_f3c2)
 
 #Capturing best values of hyperparameter after tuning
-df_val_f3c2<-data.frame(Hyperparameter=character(), Value=character())
+df_val_f3c2<-data.frame(Observation=character(), Value=character())
 
-nwln<- list(Hyperparameter= "No. of Features", Value = tuned.model_f3c2$x$fw.perc)
+nwln<- list(Observation= "No. of Features", Value = (ncol(df_tune_f3c2)-1))
 df_val_f3c2 = rbind(df_val_f3c2,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "k", Value = tuned.model_f3c2$x$k)
+nwln<- list(Observation= "fw.perc", Value = round(tuned.model_f3c2$x$fw.perc,digits = 3))
 df_val_f3c2 = rbind(df_val_f3c2,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "algorithm", Value = tuned.model_f3c2$x$algorithm)
+nwln<- list(Observation= "k", Value = tuned.model_f3c2$x$k)
 df_val_f3c2 = rbind(df_val_f3c2,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "Accuracy", Value = res_f3c2)
+nwln<- list(Observation= "algorithm", Value = tuned.model_f3c2$x$algorithm)
+df_val_f3c2 = rbind(df_val_f3c2,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Observation= "Accuracy", Value = res_f3c2)
 df_val_f3c2 = rbind(df_val_f3c2,nwln, stringsAsFactors=FALSE)
 
 print(df_val_f3c2)
+
+write.csv(df_val_f3c2, file = "/home/mangaraj/Documents/output/df_val_f3c2.csv")
+write.csv(df_tune_f3c2, file = "/home/mangaraj/Documents/output/df_val_f3c2_data.csv")
 
 #------------End of Fast k-Nearest Neighbour-------------
 
@@ -1394,33 +1502,39 @@ cols<-c(cols,"response")
 View(cols)
 
 #Dataframe with selected features
-df_tune_c3<-df_samp_cls
-df_tune_c3<-df_tune_c3[, names(df_tune_c3) %in% cols] 
-ncol(df_tune_c3)
+df_tune_f3c3<-df_samp_cls
+df_tune_f3c3<-df_tune_f3c3[, names(df_tune_f3c3) %in% cols] 
+ncol(df_tune_f3c3)
 
 #Getting Accuracy ~ Model training & Testing with subset of features
-res_f3c3<-modeltest(df_tune_c3, 'C')
+res_f3c3<-modeltest(df_tune_f3c3, 'C')
 print(res_f3c3)
 
 #Capturing best values of hyperparameter after tuning
-df_val_f3c3<-data.frame(Hyperparameter=character(), Value=character())
+df_val_f3c3<-data.frame(Observation=character(), Value=character())
 
-nwln<- list(Hyperparameter= "No. of Features", Value = tuned.model_f3c3$x$fw.perc)
+nwln<- list(Observation= "No. of Features", Value = (ncol(df_tune_f3c3)-1))
 df_val_f3c3 = rbind(df_val_f3c3,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "nu", Value = tuned.model_f3c3$x$nu)
+nwln<- list(Observation= "fw.perc", Value = round(tuned.model_f3c3$x$fw.perc,digits = 3))
 df_val_f3c3 = rbind(df_val_f3c3,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "tol", Value = tuned.model_f3c3$x$tol)
+nwln<- list(Observation= "nu", Value = round(tuned.model_f3c3$x$nu,digits = 3))
 df_val_f3c3 = rbind(df_val_f3c3,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "predict.method", Value = tuned.model_f3c3$x$predict.method)
+nwln<- list(Observation= "tol", Value = round(log(tuned.model_f3c3$x$tol,base = (10)),digits = 3))
 df_val_f3c3 = rbind(df_val_f3c3,nwln, stringsAsFactors=FALSE)
 
-nwln<- list(Hyperparameter= "Accuracy", Value = res_f3c3)
+nwln<- list(Observation= "predict.method", Value = tuned.model_f3c3$x$predict.method)
+df_val_f3c3 = rbind(df_val_f3c3,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Observation= "Accuracy", Value = res_f3c3)
 df_val_f3c3 = rbind(df_val_f3c3,nwln, stringsAsFactors=FALSE)
 
 print(df_val_f3c3)
+
+write.csv(df_val_f3c3, file = "/home/mangaraj/Documents/output/df_val_f3c3.csv")
+write.csv(df_tune_f3c3, file = "/home/mangaraj/Documents/output/df_val_f3c3_data.csv")
 
 #------------End of Fast k-Nearest Neighbour-------------
 #--------------------------------------------------------
