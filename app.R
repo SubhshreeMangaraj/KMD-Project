@@ -98,6 +98,7 @@ server <-function(input, output) {
        input$input_type2 == "Regression"            &&
        input$dynamic2    == "K-Nearest-Neighbor regressiong"){
       
+      df_val_r1 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_r1.csv"))
       df<-data.frame(df_val_r1)
     }
     
@@ -106,6 +107,7 @@ server <-function(input, output) {
             input$input_type2 == "Regression"            &&
             input$dynamic2    == "Conditional Inference Trees"){
       
+      df_val_r2 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_r2.csv"))
       df<-data.frame(df_val_r2)
     }
     
@@ -114,6 +116,7 @@ server <-function(input, output) {
             input$input_type2 == "Regression"            &&
             input$dynamic2    == "Bayesian CART"){
       
+      df_val_r3 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_r3.csv"))
       df<-data.frame(df_val_r3)
     }
     
@@ -122,6 +125,7 @@ server <-function(input, output) {
             input$input_type2 == "Classification"            &&
             input$dynamic2    == "Binomial Regression"){
       
+      df_val_c1 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_c1.csv"))
       df<-data.frame(df_val_c1)
     }
     
@@ -130,6 +134,7 @@ server <-function(input, output) {
             input$input_type2 == "Classification"            &&
             input$dynamic2    == "Fast k-Nearest Neighbour"){
       
+      df_val_c2 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_c2.csv"))
       df<-data.frame(df_val_c2)
     }
     
@@ -138,6 +143,7 @@ server <-function(input, output) {
             input$input_type2 == "Classification"            &&
             input$dynamic2    == "Linear Discriminant Analysis"){
       
+      df_val_c3 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_c3.csv"))
       df<-data.frame(df_val_c3)
     }
     
@@ -147,6 +153,7 @@ server <-function(input, output) {
             input$input_type2 == "Regression"            &&
             input$dynamic2    == "K-Nearest-Neighbor regressiong"){
       
+      df_val_f2r1 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_f2r1.csv"))
       df<-data.frame(df_val_f2r1)
     }
     
@@ -155,6 +162,7 @@ server <-function(input, output) {
             input$input_type2 == "Regression"            &&
             input$dynamic2    == "Conditional Inference Trees"){
       
+      df_val_f2r2 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_f2r2.csv"))
       df<-data.frame(df_val_f2r2)
     }
     
@@ -163,6 +171,7 @@ server <-function(input, output) {
             input$input_type2 == "Regression"            &&
             input$dynamic2    == "Bayesian CART"){
       
+      df_val_f2r3 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_f2r3.csv"))
       df<-data.frame(df_val_f2r3)
     }
     
@@ -171,6 +180,7 @@ server <-function(input, output) {
             input$input_type2 == "Classification"            &&
             input$dynamic2    == "Binomial Regression"){
       
+      df_val_f2c1 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_f2c1.csv"))
       df<-data.frame(df_val_f2c1)
     }
     
@@ -179,6 +189,7 @@ server <-function(input, output) {
             input$input_type2 == "Classification"            &&
             input$dynamic2    == "Fast k-Nearest Neighbour"){
       
+      df_val_f2c2 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_f2c2.csv"))
       df<-data.frame(df_val_f2c2)
     }
     
@@ -187,6 +198,7 @@ server <-function(input, output) {
             input$input_type2 == "Classification"            &&
             input$dynamic2    == "Linear Discriminant Analysis"){
       
+      df_val_f2c3 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_f2c3.csv"))
       df<-data.frame(df_val_f2c3)
     }
     
@@ -196,6 +208,7 @@ server <-function(input, output) {
             input$input_type2 == "Regression"            &&
             input$dynamic2    == "K-Nearest-Neighbor regressiong"){
       
+      df_val_f3r1 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_f3r1.csv"))
       df<-data.frame(df_val_f3r1)
     }
     
@@ -204,6 +217,7 @@ server <-function(input, output) {
             input$input_type2 == "Regression"            &&
             input$dynamic2    == "Conditional Inference Trees"){
       
+      df_val_f3r2 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_f3r2.csv"))
       df<-data.frame(df_val_f3r2)
     }
     
@@ -212,6 +226,7 @@ server <-function(input, output) {
             input$input_type2 == "Regression"            &&
             input$dynamic2    == "Bayesian CART"){
       
+      df_val_f3r3 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_f3r3.csv"))
       df<-data.frame(df_val_f3r3)
     }
     
@@ -220,6 +235,7 @@ server <-function(input, output) {
             input$input_type2 == "Classification"            &&
             input$dynamic2    == "Binomial Regression"){
       
+      df_val_f3c1 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_f3c1.csv"))
       df<-data.frame(df_val_f3c1)
     }
     
@@ -228,6 +244,7 @@ server <-function(input, output) {
             input$input_type2 == "Classification"            &&
             input$dynamic2    == "Fast k-Nearest Neighbour"){
       
+      df_val_f3c2 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_f3c2.csv"))
       df<-data.frame(df_val_f3c2)
     }
     
@@ -236,6 +253,7 @@ server <-function(input, output) {
             input$input_type2 == "Classification"            &&
             input$dynamic2    == "Linear Discriminant Analysis"){
       
+      df_val_f3c3 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_f3c3.csv"))
       df<-data.frame(df_val_f3c3)
     }
     #--------------------------------------------------------------------------------
@@ -244,6 +262,7 @@ server <-function(input, output) {
             input$input_type2 == "Regression"             &&
             input$dynamic2    == "K-Nearest-Neighbor regressiong"){
       
+      df_val_w1r1 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_w1r1.csv"))
       df<-data.frame(df_val_w1r1)
     }
     
@@ -252,6 +271,7 @@ server <-function(input, output) {
             input$input_type2 == "Regression"            &&
             input$dynamic2    == "Conditional Inference Trees"){
       
+      df_val_w1r2 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_w1r2.csv"))
       df<-data.frame(df_val_w1r2)
     }
     
@@ -260,6 +280,7 @@ server <-function(input, output) {
             input$input_type2 == "Regression"            &&
             input$dynamic2    == "Bayesian CART"){
       
+      df_val_w1r3 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_w1r3.csv"))
       df<-data.frame(df_val_w1r3)
     }
     
@@ -268,6 +289,7 @@ server <-function(input, output) {
             input$input_type2 == "Classification"            &&
             input$dynamic2    == "Binomial Regression"){
       
+      df_val_w1c1 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_w1c1.csv"))
       df<-data.frame(df_val_w1c1)
     }
     
@@ -276,6 +298,7 @@ server <-function(input, output) {
             input$input_type2 == "Classification"            &&
             input$dynamic2    == "Fast k-Nearest Neighbour"){
       
+      df_val_w1c2 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_w1c2.csv"))
       df<-data.frame(df_val_w1c2)
     }
     
@@ -284,6 +307,7 @@ server <-function(input, output) {
             input$input_type2 == "Classification"            &&
             input$dynamic2    == "Linear Discriminant Analysis"){
       
+      df_val_w1c3 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_w1c3.csv"))
       df<-data.frame(df_val_w1c3)
     }
     #--------------------------------------------------------------------------
@@ -293,6 +317,7 @@ server <-function(input, output) {
             input$input_type2 == "Regression"             &&
             input$dynamic2    == "K-Nearest-Neighbor regressiong"){
       
+      df_val_w2r1 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_w2r1.csv"))
       df<-data.frame(df_val_w2r1)
     }
     
@@ -301,6 +326,7 @@ server <-function(input, output) {
             input$input_type2 == "Regression"            &&
             input$dynamic2    == "Conditional Inference Trees"){
       
+      df_val_w2r2 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_w2r2.csv"))
       df<-data.frame(df_val_w2r2)
     }
     
@@ -309,6 +335,7 @@ server <-function(input, output) {
             input$input_type2 == "Regression"            &&
             input$dynamic2    == "Bayesian CART"){
       
+      df_val_w2r3 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_w2r3.csv"))
       df<-data.frame(df_val_w2r3)
     }
     
@@ -317,6 +344,7 @@ server <-function(input, output) {
             input$input_type2 == "Classification"            &&
             input$dynamic2    == "Binomial Regression"){
       
+      df_val_w2c1 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_w2c1.csv"))
       df<-data.frame(df_val_w2c1)
     }
     
@@ -325,6 +353,7 @@ server <-function(input, output) {
             input$input_type2 == "Classification"            &&
             input$dynamic2    == "Fast k-Nearest Neighbour"){
       
+      df_val_w2c2 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_w2c2.csv"))
       df<-data.frame(df_val_w2c2)
     }
     
@@ -333,6 +362,7 @@ server <-function(input, output) {
             input$input_type2 == "Classification"            &&
             input$dynamic2    == "Linear Discriminant Analysis"){
       
+      df_val_w2c3 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_w2c3.csv"))
       df<-data.frame(df_val_w2c3)
     }
     #-------------------------------------------------------------------------
@@ -341,6 +371,7 @@ server <-function(input, output) {
             input$input_type2 == "Regression"             &&
             input$dynamic2    == "K-Nearest-Neighbor regressiong"){
       
+      df_val_w3r1 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_w3r1.csv"))
       df<-data.frame(df_val_w3r1)
     }
     
@@ -349,6 +380,7 @@ server <-function(input, output) {
             input$input_type2 == "Regression"            &&
             input$dynamic2    == "Conditional Inference Trees"){
       
+      df_val_w3r2 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_w3r2.csv"))
       df<-data.frame(df_val_w3r2)
     }
     
@@ -357,6 +389,7 @@ server <-function(input, output) {
             input$input_type2 == "Regression"            &&
             input$dynamic2    == "Bayesian CART"){
       
+      df_val_w3r3 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_w3r3.csv"))
       df<-data.frame(df_val_w3r3)
     }
     
@@ -365,6 +398,7 @@ server <-function(input, output) {
             input$input_type2 == "Classification"            &&
             input$dynamic2    == "Binomial Regression"){
       
+      df_val_w3c1 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_w3c1.csv"))
       df<-data.frame(df_val_w3c1)
     }
     
@@ -373,6 +407,7 @@ server <-function(input, output) {
             input$input_type2 == "Classification"            &&
             input$dynamic2    == "Fast k-Nearest Neighbour"){
       
+      df_val_w3c2 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_w3c2.csv"))
       df<-data.frame(df_val_w3c2)
     }
     
@@ -381,6 +416,7 @@ server <-function(input, output) {
             input$input_type2 == "Classification"            &&
             input$dynamic2    == "Linear Discriminant Analysis"){
       
+      df_val_w3c3 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_w3c3.csv"))
       df<-data.frame(df_val_w3c3) 
     }
     #---------------------------------------------------------------------------
@@ -389,6 +425,7 @@ server <-function(input, output) {
             input$input_type2 == "Regression"             &&
             input$dynamic2    == "K-Nearest-Neighbor regressiong"){
       
+      df_val_w4r1 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_w4r1.csv"))
       df<-data.frame(df_val_w4r1)
     }
     
@@ -397,6 +434,7 @@ server <-function(input, output) {
             input$input_type2 == "Regression"            &&
             input$dynamic2    == "Conditional Inference Trees"){
       
+      df_val_w4r2 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_w4r2.csv"))
       df<-data.frame(df_val_w4r2)
     }
     
@@ -405,6 +443,7 @@ server <-function(input, output) {
             input$input_type2 == "Regression"            &&
             input$dynamic2    == "Bayesian CART"){
       
+      df_val_w4r3 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_w4r3.csv"))
       df<-data.frame(df_val_w4r3)
     }
     
@@ -413,6 +452,7 @@ server <-function(input, output) {
             input$input_type2 == "Classification"            &&
             input$dynamic2    == "Binomial Regression"){
       
+      df_val_w4c1 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_w4c1.csv"))
       df<-data.frame(df_val_w4c1)
     }
     
@@ -421,6 +461,7 @@ server <-function(input, output) {
             input$input_type2 == "Classification"            &&
             input$dynamic2    == "Fast k-Nearest Neighbour"){
       
+      df_val_w4c2 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_w4c2.csv"))
       df<-data.frame(df_val_w4c2)
     }
     
@@ -429,6 +470,7 @@ server <-function(input, output) {
             input$input_type2 == "Classification"            &&
             input$dynamic2    == "Linear Discriminant Analysis"){
       
+      df_val_w4c3 <- readr::read_csv(file.path(here::here(),"Documents","output", "df_val_w4c3.csv"))
       df<-data.frame(df_val_w4c3) 
     }
   }
@@ -492,7 +534,7 @@ server <-function(input, output) {
         data   = data.frame(df_tune_c1), 
         target = "response")
       
-      fv2 = generateFilterValuesData(task   = regr.task1, 
+      fv2 = generateFilterValuesData(task   = clasf.task1, 
                                      method = "FSelector_chi.squared")
       plotFilterValues(fv2, feat.type.cols = TRUE) + ggpubr::theme_pubr()
     }
@@ -506,7 +548,7 @@ server <-function(input, output) {
         data   = data.frame(df_tune_c2), 
         target = "response")
       
-      fv2 = generateFilterValuesData(task   = regr.task1, 
+      fv2 = generateFilterValuesData(task   = clasf.task1, 
                                      method = "FSelector_chi.squared")
       plotFilterValues(fv2, feat.type.cols = TRUE) + ggpubr::theme_pubr()
     }
@@ -520,7 +562,7 @@ server <-function(input, output) {
         data   = data.frame(df_tune_c3), 
         target = "response")
       
-      fv2 = generateFilterValuesData(task   = regr.task1, 
+      fv2 = generateFilterValuesData(task   = clasf.task1, 
                                      method = "FSelector_chi.squared")
       plotFilterValues(fv2, feat.type.cols = TRUE) + ggpubr::theme_pubr()
     }
@@ -577,7 +619,7 @@ server <-function(input, output) {
         data   = data.frame(df_tune_f2c1), 
         target = "response")
       
-      fv2 = generateFilterValuesData(task   = regr.task1, 
+      fv2 = generateFilterValuesData(task   = clasf.task1, 
                                      method = "party_cforest.importance")
       plotFilterValues(fv2, feat.type.cols = TRUE) + ggpubr::theme_pubr()
     }
@@ -591,7 +633,7 @@ server <-function(input, output) {
         data   = data.frame(df_tune_f2c2), 
         target = "response")
       
-      fv2 = generateFilterValuesData(task   = regr.task1, 
+      fv2 = generateFilterValuesData(task   = clasf.task1, 
                                      method = "party_cforest.importance")
       plotFilterValues(fv2, feat.type.cols = TRUE) + ggpubr::theme_pubr()
     }
@@ -605,7 +647,7 @@ server <-function(input, output) {
         data   = data.frame(df_tune_f2c3), 
         target = "response")
       
-      fv2 = generateFilterValuesData(task   = regr.task1, 
+      fv2 = generateFilterValuesData(task   = clasf.task1, 
                                      method = "party_cforest.importance")
       plotFilterValues(fv2, feat.type.cols = TRUE) + ggpubr::theme_pubr()
     }
