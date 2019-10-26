@@ -1,0 +1,310 @@
+---
+title: "Wrappermd"
+author: "Subhashree Mangaraj"
+date: "24/10/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(ParamHelpers)
+library(mlbench)
+library(mlr)
+library(FSelector)
+library(party)
+library(kknn)
+library(randomForest)
+library(tgp)
+library(stats)
+library(FNN)
+library(MASS)
+library(readr)
+library(here)
+library(randomForestSRC)
+library("parallelMap")
+library(rlang)
+#--------------
+```
+
+
+```{r}
+#--------------------Loading of data----------------------
+
+df_data_reg <- readr::read_rds(file.path(here::here(), "adsl_adsl_sum-dur-regr_df.rds"))
+df_data_clasf<- readr::read_rds(file.path(here::here(), "adsl_adsl_sum-dur-classif_df.rds"))
+
+
+df_data_reg <- df_data_reg[, -c(1:7)]
+df_data_reg$response_admission<-NULL
+
+df_data_clasf <- df_data_clasf[, -c(1:7)]
+df_data_clasf$response_admission<-NULL
+df_data_clasf$response_org<-NULL
+
+df_samp_reg <- data.frame(df_data_reg)
+df_samp_cls <- data.frame(df_data_clasf)
+df_samp_cls<-df_samp_cls[(1:100),]
+```
+
+```{r}
+#-----------Model Training and Testing-------------------
+modeltest<- function(df_tune, typeM){
+  
+  if(typeM == 'R'){#Regression
+    
+    regr.task_mod<-makeRegrTask( data = data.frame(df_tune), target = "response")
+    n1 = getTaskSize(regr.task_mod)
+    
+    # Splitting the observations for training
+    train.mod = seq(1, n1, by = 2)
+    test.mod = seq(2, n1, by = 2)
+    
+    # Train the learner
+    mod = mlr::train("regr.lm", regr.task_mod, subset = train.mod)
+    mod
+    
+    task.pred = predict(mod, task = regr.task_mod, subset = test.mod)
+    task.pred
+    res<-performance(task.pred, measures = mse)
+    
+    
+    return(round(res,digits = 3))
+    
+  }
+  
+  if(typeM == 'C'){#Classification
+    
+    clsf.task_mod<-makeClassifTask( data = data.frame(df_tune), target = "response")
+    n2 = getTaskSize(clsf.task_mod)
+    
+    # Splitting the observations for training
+    train.mod = seq(1, n2, by = 2)
+    test.mod = seq(2, n2, by = 2)
+    
+    # Train the learner
+    mod = mlr::train("classif.cforest", clsf.task_mod, subset = train.mod)
+    mod
+    task.pred = predict(mod, task = clsf.task_mod, subset = test.mod)
+    task.pred
+    res<-performance(task.pred, measures = acc)
+    
+    return(round(res,digits = 3))
+    
+  }
+}
+#--------------------------------------------------------
+```
+
+```{r}
+
+#----------Common data: learner--------------------------
+
+#Regression:Task Creation
+regr.task<-makeRegrTask(id     = "Tin_regr", 
+                        data   = data.frame(df_samp_reg), 
+                        target = "response")
+getTaskFeatureNames(regr.task)
+
+#Repeated cross validation
+cv.folds <- makeResampleDesc("CV", iters = 3)
+
+# Define model tuning algorithm ~ Random tune algorithm
+random.tune <- makeTuneControlRandom(maxit = 5)
+
+#Classification:Task Creation
+clsf.task<-makeClassifTask(id     = "Tin_clsf", 
+                           data   = data.frame(df_samp_cls), 
+                           target = "response")
+getTaskFeatureNames(clsf.task)
+
+ctrl = makeTuneControlGrid()
+inner = makeResampleDesc("Holdout")
+outer = makeResampleDesc("CV", iters = 3)
+
+```
+```{r}
+
+#----------W:4.makeFeatSelControlExhaustive--------------
+
+control1<-makeFeatSelControlExhaustive(same.resampling.instance = TRUE,
+                                       maxit                = 20L)
+
+##CLASSIFICATION
+#---------------
+
+#---------3.1 C:Binomial Regression----------------------
+
+#using the yuned parameters to make the learner
+lrnr<-makeLearner("classif.binomial",
+                  par.vals = list(link="probit"))
+
+
+#Defining learner model
+lrn_w4c1<- makeFeatSelWrapper(learner    = lrnr, 
+                              resampling = cv.folds,
+                              control    = control1, 
+                              show.info = FALSE)
+
+#Training of model to extract features
+mod_w4c1 = mlr::train(lrn_w4c1, task = clsf.task)
+
+#Extract the features
+sfeats = getFeatSelResult(mod_w4c1)
+
+cols<-sfeats$x
+cols<-c(cols,"response")
+#print(cols)
+
+#dataframe with selected features
+df_tune_w4c1<-df_samp_cls
+df_tune_w4c1<-df_tune_w4c1[, names(df_tune_w4c1) %in% cols] 
+ncol(df_tune_w4c1)
+
+#Getting Accuracy ~ Model training & Testing with subset of features
+res_w4c1<-modeltest(df_tune_w4c1, 'C')
+print(res_w4c1)
+
+#Capturing best values of hyperparameter after tuning
+df_val_w4c1<-data.frame(Observation=character(), Value=character(), Range=character())
+
+nwln<- list(Observation= "No. of Features", Value = (ncol(df_tune_w4c1)-1), Range = (ncol(df_data_clasf)-1))
+df_val_w4c1 = rbind(df_val_w4c1,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Observation= "link", Value = "probit", Range = "logit, probit ,cloglog ,cauchit")
+df_val_w4c1 = rbind(df_val_w4c1,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Observation= "Accuracy", Value = res_w4c1, Range="")
+df_val_w4c1 = rbind(df_val_w4c1,nwln, stringsAsFactors=FALSE)
+
+write.csv(df_val_w4c1, file = "/Users/MANAS MANGARAJ/Documents/wrapperoutput/df_val_w4c1.csv")
+write.csv(df_tune_w4c1, file = "/Users/MANAS MANGARAJ/Documents/wrapperoutput/df_val_w4c1_data.csv")
+
+print(df_val_w4c1)
+#---------End of Binomial Regression---------------------
+
+
+
+```
+
+
+
+```{r}
+#---------3.2 C:Fast k-Nearest Neighbour-----------------
+
+#using the tuned parameters to make the learner
+lrnr<-makeLearner("classif.fnn",
+                  par.vals = list(k=9,
+                                  algorithm="brute"))
+
+#Defining learner model
+lrn_w4c2<- makeFeatSelWrapper(learner    = lrnr, 
+                              resampling = cv.folds,
+                              control    = control1, 
+                              show.info  = FALSE)
+
+
+#Training of model to extract features
+mod_w4c2 = mlr::train(lrn_w4c2, task = clsf.task)
+
+#Extract the features
+sfeats = getFeatSelResult(mod_w4c2)
+
+cols<-sfeats$x
+cols<-c(cols,"response")
+#print(cols)
+
+#dataframe with selected features
+df_tune_w4c2<-df_samp_cls
+df_tune_w4c2<-df_tune_w4c2[, names(df_tune_w4c2) %in% cols] 
+ncol(df_tune_w4c2)
+
+#Getting Accuracy ~ Model training & Testing with subset of features
+res_w4c2<-modeltest(df_tune_w4c2, 'C')
+print(res_w4c2)
+
+#Capturing best values of hyperparameter after tuning
+df_val_w4c2<-data.frame(Observation=character(), Value=character(), Range=character())
+
+nwln<- list(Observation= "No. of Features", Value = (ncol(df_tune_w4c2)-1), Range=(ncol(df_samp_cls)-1))
+df_val_w4c2 = rbind(df_val_w4c2,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Observation= "k", Value = 9, Range = "1-10")
+df_val_w4c2 = rbind(df_val_w4c2,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Observation= "algorithm", Value = "brute", Range ="cover_tree, kd_tree, brute")
+df_val_w4c2 = rbind(df_val_w4c2,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Observation= "Accuracy", Value = round(res_w4c2,3),Range="")
+df_val_w4c2 = rbind(df_val_w4c2,nwln, stringsAsFactors=FALSE)
+
+
+print(df_val_w4c2)
+
+write.csv(df_val_w4c2, file = "/Users/MANAS MANGARAJ/Documents/wrapperoutput/df_val_w4c2.csv")
+write.csv(df_tune_w4c2, file = "/Users/MANAS MANGARAJ/Documents/wrapperoutput/df_val_w4c2_data.csv")
+
+
+#---------End of Fast k-Nearest Neighbour----------------
+
+#---------3.3 C:Linear Discriminant Analysis-------------
+
+#using the yuned parameters to make the learner
+lrnr<-makeLearner("classif.lda",
+                  par.vals = list(nu=4.67,
+                                  #tot=0,
+                                  predict.method="predictive"))
+
+#Defining learner model
+lrn_w4c3<- makeFeatSelWrapper(learner    = lrnr, 
+                              resampling = cv.folds,
+                              control    = control1, 
+                              show.info  = FALSE)
+
+
+#Training of model to extract features
+mod_w4c3 = mlr::train(lrn_w4c3, task = clsf.task)
+
+#Extract the features
+sfeats = getFeatSelResult(mod_w4c3)
+
+cols<-sfeats$x
+cols<-c(cols,"response")
+#print(cols)
+
+#dataframe with selected features
+df_tune_w4c3<-df_samp_cls
+df_tune_w4c3<-df_tune_w4c3[, names(df_tune_w4c3) %in% cols] 
+ncol(df_tune_w4c3)
+
+#Getting Accuracy ~ Model training & Testing with subset of features
+res_w4c3<-modeltest(df_tune_w4c3, 'C')
+print(res_w4c3)
+
+#Capturing best values of hyperparameter after tuning
+df_val_w4c3<-data.frame(Hyperparameter=character(), Value=character(),Range=character())
+
+nwln<- list(Observation= "No. of Features", Value = (ncol(df_tune_w4c3)-1),Range=(ncol(df_samp_cls)-1))
+df_val_w4c3 = rbind(df_val_w4c3,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Observation= "nu", Value = 4.67,Range="2-10")
+df_val_w4c3 = rbind(df_val_w4c3,nwln, stringsAsFactors=FALSE)
+
+#nwln<- list(Observation= "tol", Value = tuned.model_c3$x$tol)
+#df_val_w1c3 = rbind(df_val_w1c3,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Observation= "predict.method", Value = "predictive",Range="plug-in,predictive,debiased")
+df_val_w4c3 = rbind(df_val_w4c3,nwln, stringsAsFactors=FALSE)
+
+nwln<- list(Observation= "Accuracy", Value = res_w4c3,Range="")
+df_val_w4c3 = rbind(df_val_w4c3,nwln, stringsAsFactors=FALSE)
+
+print(df_val_w4c3)
+
+write.csv(df_val_w4c3, file = "/Users/MANAS MANGARAJ/Documents/wrapperoutput/df_val_w4c3.csv")
+write.csv(df_tune_w4c3, file = "/Users/MANAS MANGARAJ/Documents/wrapperoutput/df_val_w4c3_data.csv")
+
+
+#---------End of Linear Discriminant Analysis------------
+#--------------------------------------------------------
+```

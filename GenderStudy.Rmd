@@ -1,0 +1,1020 @@
+---
+title: "Gender Based Study"
+author: "Subhashree Mangaraj"
+date: "18/10/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+The Gender specific study is an analysis comprising of five classification modelling algorithms which would help us to study the contribution of features in the prediction of a particular gender. 
+
+Data Preprocessing
+
+```{r}
+
+df_data_g <- readr::read_rds(file.path(here::here(), "adsl_adsl_sum-dur-regr_df.rds"))
+df_val_w2c3 <- readr::read_csv(file.path(here::here(),"wrapperoutput", "df_val_w2c3_data.csv"))
+df_val_w2c3 <- df_val_w2c3[, -c(1)]
+
+cols<-colnames(df_val_w2c3)
+cols<-c(cols,"sozk_soz01_male")
+#View(cols)
+
+#Dataframe with selected features from the Feature selection study which gave the highest accuracy
+df_w2c3<-df_data_g
+df_w2c3<-df_w2c3[, names(df_w2c3) %in% cols] 
+ncol(df_w2c3)
+df_w2c3$sozk_soz01_male <- ifelse(df_w2c3$sozk_soz01_male == "1", "male", "female")
+df_w2c3$sozk_soz01_male<-as.factor(df_w2c3$sozk_soz01_male)
+
+#Filtering patients having depression level more than 16
+df_w2c3<-filter(df_w2c3, response > 16)
+
+df_subset_data<-data.frame(df_w2c3)
+#Summary of reduced feature dataset
+str(df_subset_data)
+```
+
+Random Forest
+
+```{r}
+set.seed(123)
+split_df<-sample(nrow(df_subset_data), 2/3 * nrow(df_subset_data))
+
+df.rf.train <- df_subset_data[split_df, ]
+df.rf.test  <- df_subset_data[-split_df, ]
+
+#Task for training data
+#----------------------
+task_rf.train<-  makeClassifTask(id = "Tinnitus_gender", 
+                           data = data.frame(df.rf.train), 
+                           target = "sozk_soz01_male")
+
+#Task for test data
+#----------------------
+task_rf.test<-  makeClassifTask(id = "Tinnitus_gender1", 
+                                 data = data.frame(df.rf.test), 
+                                 target = "sozk_soz01_male")
+
+#Repeated cross validation
+#-------------------------
+cv.folds <- makeResampleDesc("CV", iters = 3)
+
+# Define model tuning algorithm ~ Random tune algorithm
+#------------------------------------------------------
+random.tune <- makeTuneControlRandom(maxit = 5)
+
+#Constructing a learner with ranger classifier
+#---------------------------------------------
+lrn.rf.g<-makeLearner("classif.ranger")
+
+#Get parameter set of the learner
+#--------------------------------
+getParamSet(lrn.rf.g)
+
+# Define parameters of model and search grid ~ !!!! MODEL SPECIFIC !!!!
+#----------------------------------------------------------------------
+model.params.rf.g <- makeParamSet(makeIntegerParam("num.trees", lower = 300, upper = 900),
+                                  makeIntegerParam("mtry",lower= 1, upper = 10),
+                                  makeIntegerParam("min.node.size", lower = 1, upper = 10),
+                                  makeNumericParam("sample.fraction", lower = 0, upper = 1),
+                                  makeDiscreteParam("importance", values = c("impurity", "permutation")),
+                                  makeDiscreteParam("splitrule", values = c("gini","extratrees")))
+#Tuning parameters
+#-----------------
+tune.rf.g<-tuneParams(learner    = "classif.ranger",
+                      task       = task_rf.train,
+                      resampling = cv.folds,
+                      control    = random.tune,
+                      par.set    = model.params.rf.g )
+
+#Constructing a learner with ranger classifier with tuned hyperparameters
+#------------------------------------------------------------------------
+lrn_rf.g<-setHyperPars(makeLearner(("classif.ranger"), par.vals = list(num.trees       = tune.rf.g$x$num.trees,
+                                                                       mtry            = tune.rf.g$x$mtry,
+                                                                       min.node.size   = tune.rf.g$x$min.node.size,
+                                                                       sample.fraction = tune.rf.g$x$sample.fraction,
+                                                                       importance      = tune.rf.g$x$importance,
+                                                                       splitrule       = tune.rf.g$x$splitrule),
+                                   predict.type = "response"))
+
+
+
+mod.rf.g = mlr::train(lrn.rf.g, task_rf.train)
+task.pred.rf = predict(mod.rf.g, task = task_rf.test)
+performance(task.pred.rf, measures = list(fpr, fnr, mmce))
+
+r = calculateROCMeasures(task.pred.rf)
+r
+
+X = df.rf.test[-which(names(df.rf.test) == "sozk_soz01_male")]
+y = df.rf.test$sozk_soz01_male
+predictor.rf = Predictor$new(mod.rf.g, data = X, y = y, type = "class") 
+
+# For some models we have to specify additional arguments for the predict function
+imp.rf = FeatureImp$new(predictor.rf, loss = "ce")
+plot(imp.rf)
+
+#View(imp.rf$results)
+
+#feature effects
+#ale = FeatureEffect$new(predictor.rf, feature = "tq_tin21")
+#ale$plot()
+#ale$results
+
+#PDP
+pdp.obj1 = Partial$new(predictor.rf, feature = "tlq_tlq02_3")
+plot(pdp.obj1)
+
+pdp.obj2 = Partial$new(predictor.rf, feature = "tq_tin39")
+plot(pdp.obj2)
+
+pdp.obj3 = Partial$new(predictor.rf, feature = "psq_stress05")
+plot(pdp.obj3)
+
+pdp.obj4 = Partial$new(predictor.rf, feature = "adsl_adsl_lk")
+plot(pdp.obj4)
+
+pdp.obj5 = Partial$new(predictor.rf, feature = "tq_tin15")
+plot(pdp.obj5)
+
+pdp.obj6 = Partial$new(predictor.rf, feature = "tq_tin47")
+plot(pdp.obj6)
+
+pdp.obj7 = Partial$new(predictor.rf, feature = "tlq_tlq02_1")
+plot(pdp.obj7)
+
+pdp.obj8 = Partial$new(predictor.rf, feature = "adsl_adsl10")
+plot(pdp.obj8)
+
+pdp.obj9 = Partial$new(predictor.rf, feature = "sozk_soz06_unmarried")
+plot(pdp.obj9)
+
+pdp.obj10 = Partial$new(predictor.rf, feature = "sozk_soz18_arbeiter")
+plot(pdp.obj10)
+
+df_pdp<-data.frame(imp.rf$results)
+df_pdp<-df_pdp[order(-df_pdp$importance),]
+df_pdp<-df_pdp[1:15,]
+
+
+df_res<-data.frame(imp.rf$results)
+
+dd<-df_res %>% 
+  mutate(newc = 90*importance)
+
+dd<-dd[order(-dd$newc),]
+
+dd$group = dd %>% group_indices(importance)
+dd$group<-as.factor(dd$group)
+
+dd = dd %>% arrange(group, newc)
+data<-dd
+
+# Set a number of 'empty bar' to add at the end of each group
+empty_bar <- 1
+to_add <- data.frame( matrix(NA, empty_bar*nlevels(data$group), ncol(data)) )
+colnames(to_add) <- colnames(data)
+to_add$group <- rep(levels(data$group), each=empty_bar)
+data <- rbind(data, to_add)
+data <- data %>% arrange(group)
+data$id <- seq(1, nrow(data))
+
+# Get the name and the y position of each label
+label_data <- data
+number_of_bar <- nrow(label_data)
+angle <- 90 - 360 * (label_data$id-0.5) /number_of_bar     # I substract 0.5 because the letter must have the angle of the center of the bars. Not extreme right(1) or extreme left (0)
+label_data$hjust <- ifelse( angle < -90, 1, 0)
+label_data$angle <- ifelse(angle < -90, angle+180, angle)
+
+# prepare a data frame for base lines
+base_data <- data %>% 
+  group_by(group) %>% 
+  summarize(start=min(id), end=max(id) - empty_bar) %>% 
+  rowwise() %>% 
+  mutate(title=mean(c(start, end)))
+
+# prepare a data frame for grid (scales)
+grid_data <- base_data
+grid_data$end <- grid_data$end[ c( nrow(grid_data), 1:nrow(grid_data)-1)] + 1
+grid_data$start <- grid_data$start - 1
+grid_data <- grid_data[-1,]
+
+# Make the plot
+p <- ggplot(data, aes(x=as.factor(id), y=newc, fill=group)) +       # Note that id is a factor. If x is numeric, there is some space between the first bar
+  
+  geom_bar(aes(x=as.factor(id), y=newc, fill=group), stat="identity", alpha=0.5) +
+  
+  # Add a val=100/75/50/25 lines. I do it at the beginning to make sur barplots are OVER it.
+  geom_segment(data=grid_data, aes(x = end, y = 80, xend = start, yend = 80), colour = "grey", alpha=1, size=0.1 , inherit.aes = FALSE ) +
+  geom_segment(data=grid_data, aes(x = end, y = 60, xend = start, yend = 60), colour = "grey", alpha=1, size=0.1 , inherit.aes = FALSE ) +
+  geom_segment(data=grid_data, aes(x = end, y = 40, xend = start, yend = 40), colour = "grey", alpha=1, size=0.1 , inherit.aes = FALSE ) +
+  geom_segment(data=grid_data, aes(x = end, y = 20, xend = start, yend = 20), colour = "grey", alpha=1, size=0.1 , inherit.aes = FALSE ) +
+  
+  # Add text showing the value of each 100/75/50/25 lines
+  #annotate("text", x = rep(max(data$id),4), y = c(20, 40, 60, 80), label = c("20", "40", #"60", "80") , color="grey", size=3 , angle=0, fontface="bold", hjust=1) +
+  
+  geom_bar(aes(x=as.factor(id), y=newc, fill=group), stat="identity", alpha=0.5) +
+  ylim(-70,150) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+    plot.margin = unit(rep(-1,4), "cm") 
+  ) +
+  coord_polar() + 
+  geom_text(data=label_data, aes(x=id, y=newc+10, label=feature, hjust=hjust), color="black", fontface="bold",alpha=0.6, size=2.5, angle= label_data$angle, inherit.aes = FALSE ) 
+  
+  # Add base line information
+  #geom_segment(data=base_data, aes(x = start, y = -5, xend = end, yend = -5), colour = #"black", alpha=0.8, size=0.6 , inherit.aes = FALSE )  +
+ # geom_text(data=base_data, aes(x = title, y = -18, label=group), hjust=1, colour = #"black", alpha=0.8, size=4, fontface="bold", inherit.aes = FALSE)
+
+p
+
+
+df.imp.rf<-data.frame(imp.rf$results)
+```
+
+LASSO REGRESSION
+
+```{r}
+# Create training (70%) and test (30%) sets 
+# Use set.seed for reproducibility
+#-------------------------------------------
+set.seed(123)
+split_df<-sample(nrow(df_subset_data), 2/3 * nrow(df_subset_data))
+
+df_lasso_train <- df_subset_data[split_df, ]
+df_lasso_test  <- df_subset_data[-split_df, ]
+
+#Task for training data
+task_lasso<-makeClassifTask(id = "Tinnitus_svm", 
+                          data = data.frame(df_lasso_train), 
+                          target = "sozk_soz01_male")
+
+#Task for training data
+task_lasso.test<-makeClassifTask(id = "Tinnitus_svm", 
+                          data = data.frame(df_lasso_test), 
+                          target = "sozk_soz01_male")
+#Repeated cross validation
+#-------------------------
+cv.folds <- makeResampleDesc("CV", iters = 3)
+
+# Define model tuning algorithm ~ Random tune algorithm
+#------------------------------------------------------
+random.tune <- makeTuneControlRandom(maxit = 5)
+
+#Constructing a learner with ranger classifier
+#---------------------------------------------
+#lrn.lasso<-makeFilterWrapper("classif.cvglmnet")
+lrn.lasso<-makeLearner("classif.cvglmnet")
+#Get parameter set of the learner
+#--------------------------------
+getParamSet(lrn.lasso)
+
+# Define parameters of model and search grid ~ !!!! MODEL SPECIFIC !!!!
+#----------------------------------------------------------------------
+#model.params.lasso <- makeParamSet(makeIntegerParam("fw.perc", lower = 0, upper = 1),
+ #                                makeIntegerParam("nlambda", lower = 1, upper = 500))
+                                 #makeNumericParam("lambda.min.ratio", lower = 0, upper = 1))
+model.params.lasso <- makeParamSet(makeIntegerParam("nlambda", lower = 1, upper = 500))
+
+tune.lasso<-tuneParams( learner    = lrn.lasso,
+                      task       = task_lasso,
+                      resampling = cv.folds,
+                      par.set    = model.params.lasso,
+                      control    = random.tune )
+
+#lrn.lasso <- makeFilterWrapper(learner   = "classif.cvglmnet",  
+                             #par.set   = tune.lasso,
+                             #predict.type = "response")
+
+lrn.lasso <-  setHyperPars(makeLearner("classif.cvglmnet"),  
+                           nlambda   = tune.lasso$x$nlambda)
+
+mod.lasso<-mlr::train(lrn.lasso,task_lasso)
+
+task.pred.lasso = predict(mod.lasso, task = task_lasso.test)
+performance(task.pred.lasso, measures = list(fpr, fnr, mmce))
+
+r = calculateROCMeasures(task.pred.lasso)
+r
+
+
+#getFeatureImportance(mod.lasso)
+
+X = df_lasso_test[-which(names(df_lasso_test) == "sozk_soz01_male")]
+y = df_lasso_test$sozk_soz01_male
+predictor.lasso = Predictor$new(mod.lasso, data = X, y = y, type = "class") 
+#predictor.lasso$predict(df_male_test)
+
+performance(task.pred.lasso, measures = list(fpr, fnr, mmce))
+
+r = calculateROCMeasures(task.pred.lasso)
+r
+imp.lasso = FeatureImp$new(predictor.lasso, loss = "ce")
+plot(imp.lasso)
+
+df.imp.lasso<-data.frame(imp.lasso$results)
+df.imp.lasso<-df.imp.lasso[order(-df.imp.lasso$importance),]
+
+
+View(imp.lasso$results)
+
+#PDP
+pdp.obj1 = Partial$new(predictor.lasso, feature = "tlq_tlq02_1")
+plot(pdp.obj1)
+
+pdp.obj2 = Partial$new(predictor.lasso, feature = "tq_tin39")
+plot(pdp.obj2)
+
+pdp.obj3 = Partial$new(predictor.lasso, feature = "tq_tin51")
+plot(pdp.obj3)
+
+pdp.obj4 = Partial$new(predictor.lasso, feature = "tq_tin09")
+plot(pdp.obj4)
+
+pdp.obj5 = Partial$new(predictor.lasso, feature = "tq_tin25")
+plot(pdp.obj5)
+
+pdp.obj6 = Partial$new(predictor.lasso, feature = "psq_stress30")
+plot(pdp.obj6)
+
+pdp.obj7 = Partial$new(predictor.lasso, feature = "sozk_soz05_partner")
+plot(pdp.obj7)
+
+pdp.obj8 = Partial$new(predictor.lasso, feature = "psq_stress27")
+plot(pdp.obj8)
+
+pdp.obj9 = Partial$new(predictor.lasso, feature = "tq_tin34")
+plot(pdp.obj9)
+
+pdp.obj10 = Partial$new(predictor.lasso, feature = "tq_tin47")
+plot(pdp.obj10)
+
+
+df_res<-data.frame(imp.lasso$results)
+
+dd<-df_res %>% 
+  mutate(newc = 90*importance)
+
+dd<-dd[order(-dd$newc),]
+
+dd$group = dd %>% group_indices(importance)
+dd$group<-as.factor(dd$group)
+
+dd = dd %>% arrange(group, newc)
+data<-dd
+
+# Set a number of 'empty bar' to add at the end of each group
+empty_bar <- 1
+to_add <- data.frame( matrix(NA, empty_bar*nlevels(data$group), ncol(data)) )
+colnames(to_add) <- colnames(data)
+to_add$group <- rep(levels(data$group), each=empty_bar)
+data <- rbind(data, to_add)
+data <- data %>% arrange(group)
+data$id <- seq(1, nrow(data))
+
+# Get the name and the y position of each label
+label_data <- data
+number_of_bar <- nrow(label_data)
+angle <- 90 - 360 * (label_data$id-0.5) /number_of_bar     # I substract 0.5 because the letter must have the angle of the center of the bars. Not extreme right(1) or extreme left (0)
+label_data$hjust <- ifelse( angle < -90, 1, 0)
+label_data$angle <- ifelse(angle < -90, angle+180, angle)
+
+# prepare a data frame for base lines
+base_data <- data %>% 
+  group_by(group) %>% 
+  summarize(start=min(id), end=max(id) - empty_bar) %>% 
+  rowwise() %>% 
+  mutate(title=mean(c(start, end)))
+
+# prepare a data frame for grid (scales)
+grid_data <- base_data
+grid_data$end <- grid_data$end[ c( nrow(grid_data), 1:nrow(grid_data)-1)] + 1
+grid_data$start <- grid_data$start - 1
+grid_data <- grid_data[-1,]
+
+# Make the plot
+p <- ggplot(data, aes(x=as.factor(id), y=newc, fill=group)) +       # Note that id is a factor. If x is numeric, there is some space between the first bar
+  
+  geom_bar(aes(x=as.factor(id), y=newc, fill=group), stat="identity", alpha=0.5) +
+  
+  # Add a val=100/75/50/25 lines. I do it at the beginning to make sur barplots are OVER it.
+  geom_segment(data=grid_data, aes(x = end, y = 80, xend = start, yend = 80), colour = "grey", alpha=1, size=0.1 , inherit.aes = FALSE ) +
+  geom_segment(data=grid_data, aes(x = end, y = 60, xend = start, yend = 60), colour = "grey", alpha=1, size=0.1 , inherit.aes = FALSE ) +
+  geom_segment(data=grid_data, aes(x = end, y = 40, xend = start, yend = 40), colour = "grey", alpha=1, size=0.1 , inherit.aes = FALSE ) +
+  geom_segment(data=grid_data, aes(x = end, y = 20, xend = start, yend = 20), colour = "grey", alpha=1, size=0.1 , inherit.aes = FALSE ) +
+  
+  # Add text showing the value of each 100/75/50/25 lines
+  #annotate("text", x = rep(max(data$id),4), y = c(20, 40, 60, 80), label = c("20", "40", #"60", "80") , color="grey", size=3 , angle=0, fontface="bold", hjust=1) +
+  
+  geom_bar(aes(x=as.factor(id), y=newc, fill=group), stat="identity", alpha=0.5) +
+  ylim(-70,150) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+    plot.margin = unit(rep(-1,4), "cm") 
+  ) +
+  coord_polar() + 
+  geom_text(data=label_data, aes(x=id, y=newc+10, label=feature, hjust=hjust), color="black", fontface="bold",alpha=0.6, size=2.5, angle= label_data$angle, inherit.aes = FALSE ) 
+  
+  # Add base line information
+  #geom_segment(data=base_data, aes(x = start, y = -5, xend = end, yend = -5), colour = #"black", alpha=0.8, size=0.6 , inherit.aes = FALSE )  +
+ # geom_text(data=base_data, aes(x = title, y = -18, label=group), hjust=1, colour = #"black", alpha=0.8, size=4, fontface="bold", inherit.aes = FALSE)
+
+p
+
+```
+```{r}
+# Create training (70%) and test (30%) sets 
+# Use set.seed for reproducibility
+#-------------------------------------------
+set.seed(123)
+split_df<-sample(nrow(df_subset_data), 2/3 * nrow(df_subset_data))
+
+df_ridge_train <- df_subset_data[split_df, ]
+df_ridge_test  <- df_subset_data[-split_df, ]
+
+#Task for training data
+task_ridge<-makeClassifTask(id = "Tinnitus_svm", 
+                            data = data.frame(df_ridge_train), 
+                            target = "sozk_soz01_male")
+
+#Task for test data
+task_ridge.test<-makeClassifTask(id = "Tinnitus_svm", 
+                            data = data.frame(df_ridge_test), 
+                            target = "sozk_soz01_male")
+#Repeated cross validation
+#-------------------------
+cv.folds <- makeResampleDesc("CV", iters = 3)
+
+# Define model tuning algorithm ~ Random tune algorithm
+#------------------------------------------------------
+random.tune <- makeTuneControlRandom(maxit = 5)
+
+#Constructing a learner with ranger classifier
+#---------------------------------------------
+lrn.ridge<-makeLearner("classif.cvglmnet")
+
+#Get parameter set of the learner
+#--------------------------------
+getParamSet(lrn.ridge)
+
+# Define parameters of model and search grid ~ !!!! MODEL SPECIFIC !!!!
+#----------------------------------------------------------------------
+model.params.ridge <- makeParamSet(#makeIntegerParam("fw.perc", lower = 0, upper = 1),
+                                   makeIntegerParam("nlambda", lower = 1, upper = 500))
+
+tune.ridge<-tuneParams( learner    = "classif.cvglmnet",
+                        task       = task_ridge,
+                        resampling = cv.folds,
+                        par.set    = model.params.ridge,
+                        control    = random.tune )
+
+#-----------------------
+lrn.ridge = setHyperPars(makeLearner("classif.cvglmnet"), alpha = 0, nlambda=tune.ridge$x$nlambda)
+mod.ridge<-mlr::train(lrn.ridge,task_ridge)
+
+task.pred.ridge = predict(mod.ridge, task = task_ridge.test)
+performance(task.pred.ridge, measures = list(fpr, fnr, mmce))
+
+r = calculateROCMeasures(task.pred.ridge)
+r
+
+X = df_ridge_test[-which(names(df_ridge_test) == "sozk_soz01_male")]
+y = df_ridge_test$sozk_soz01_male
+predictor.ridge = Predictor$new(mod.ridge, data = X, y = y, type = "class")
+predictor.ridge$predict(df_ridge_test)
+imp.ridge = FeatureImp$new(predictor.ridge, loss = "ce")
+plot(imp.ridge)
+
+#interaction
+#interact.ridge = Interaction$new(mod.ridge)
+#plot(interact.ridge)
+
+#df.imp.ridge<-data.frame(imp.ridge$results)
+#df.imp.ridge<-df.imp.ridge[order(-df.imp.ridge$importance),]
+
+
+#View(imp.ridge$results)
+
+#PDP
+pdp.obj1 = Partial$new(predictor.ridge, feature = "sozk_soz06_unmarried")
+plot(pdp.obj1)
+
+pdp.obj2 = Partial$new(predictor.ridge, feature = "tq_tin47")
+plot(pdp.obj2)
+
+pdp.obj3 = Partial$new(predictor.ridge, feature = "adsl_adsl12")
+plot(pdp.obj3)
+
+pdp.obj4 = Partial$new(predictor.ridge, feature = "tq_tin30")
+plot(pdp.obj4)
+
+pdp.obj5 = Partial$new(predictor.ridge, feature = "psq_stress26")
+plot(pdp.obj5)
+
+pdp.obj6 = Partial$new(predictor.ridge, feature = "tq_tin51")
+plot(pdp.obj6)
+
+pdp.obj7 = Partial$new(predictor.ridge, feature = "psq_stress20")
+plot(pdp.obj7)
+
+pdp.obj8 = Partial$new(predictor.ridge, feature = "sozk_soz25_numdoc")
+plot(pdp.obj8)
+
+pdp.obj9 = Partial$new(predictor.ridge, feature = "psq_stress12")
+plot(pdp.obj9)
+
+pdp.obj10 = Partial$new(predictor.ridge, feature = "sf8_vt_sf36vit")
+plot(pdp.obj10)
+
+pdp.obj11 = Partial$new(predictor.ridge, feature = "tq_tin33")
+plot(pdp.obj11)
+
+df_res<-data.frame(imp.ridge$results)
+
+dd<-df_res %>% 
+  mutate(newc = 90*importance)
+
+dd<-dd[order(-dd$newc),]
+
+dd$group = dd %>% group_indices(importance)
+dd$group<-as.factor(dd$group)
+
+dd = dd %>% arrange(group, newc)
+data<-dd
+
+# Set a number of 'empty bar' to add at the end of each group
+empty_bar <- 1
+to_add <- data.frame( matrix(NA, empty_bar*nlevels(data$group), ncol(data)) )
+colnames(to_add) <- colnames(data)
+to_add$group <- rep(levels(data$group), each=empty_bar)
+data <- rbind(data, to_add)
+data <- data %>% arrange(group)
+data$id <- seq(1, nrow(data))
+
+# Get the name and the y position of each label
+label_data <- data
+number_of_bar <- nrow(label_data)
+angle <- 90 - 360 * (label_data$id-0.5) /number_of_bar     # I substract 0.5 because the letter must have the angle of the center of the bars. Not extreme right(1) or extreme left (0)
+label_data$hjust <- ifelse( angle < -90, 1, 0)
+label_data$angle <- ifelse(angle < -90, angle+180, angle)
+
+# prepare a data frame for base lines
+base_data <- data %>% 
+  group_by(group) %>% 
+  summarize(start=min(id), end=max(id) - empty_bar) %>% 
+  rowwise() %>% 
+  mutate(title=mean(c(start, end)))
+
+# prepare a data frame for grid (scales)
+grid_data <- base_data
+grid_data$end <- grid_data$end[ c( nrow(grid_data), 1:nrow(grid_data)-1)] + 1
+grid_data$start <- grid_data$start - 1
+grid_data <- grid_data[-1,]
+
+# Make the plot
+p <- ggplot(data, aes(x=as.factor(id), y=newc, fill=group)) +       # Note that id is a factor. If x is numeric, there is some space between the first bar
+  
+  geom_bar(aes(x=as.factor(id), y=newc, fill=group), stat="identity", alpha=0.5) +
+  
+  # Add a val=100/75/50/25 lines. I do it at the beginning to make sur barplots are OVER it.
+  geom_segment(data=grid_data, aes(x = end, y = 80, xend = start, yend = 80), colour = "grey", alpha=1, size=0.1 , inherit.aes = FALSE ) +
+  geom_segment(data=grid_data, aes(x = end, y = 60, xend = start, yend = 60), colour = "grey", alpha=1, size=0.1 , inherit.aes = FALSE ) +
+  geom_segment(data=grid_data, aes(x = end, y = 40, xend = start, yend = 40), colour = "grey", alpha=1, size=0.1 , inherit.aes = FALSE ) +
+  geom_segment(data=grid_data, aes(x = end, y = 20, xend = start, yend = 20), colour = "grey", alpha=1, size=0.1 , inherit.aes = FALSE ) +
+  
+  # Add text showing the value of each 100/75/50/25 lines
+  #annotate("text", x = rep(max(data$id),4), y = c(20, 40, 60, 80), label = c("20", "40", #"60", "80") , color="grey", size=3 , angle=0, fontface="bold", hjust=1) +
+  
+  geom_bar(aes(x=as.factor(id), y=newc, fill=group), stat="identity", alpha=0.5) +
+  ylim(-70,150) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+    plot.margin = unit(rep(-1,4), "cm") 
+  ) +
+  coord_polar() + 
+  geom_text(data=label_data, aes(x=id, y=newc+10, label=feature, hjust=hjust), color="black", fontface="bold",alpha=0.6, size=2.5, angle= label_data$angle, inherit.aes = FALSE ) 
+  
+  # Add base line information
+  #geom_segment(data=base_data, aes(x = start, y = -5, xend = end, yend = -5), colour = #"black", alpha=0.8, size=0.6 , inherit.aes = FALSE )  +
+ # geom_text(data=base_data, aes(x = title, y = -18, label=group), hjust=1, colour = #"black", alpha=0.8, size=4, fontface="bold", inherit.aes = FALSE)
+
+p
+```
+
+Support Vector Machine
+
+```{r}
+# Create training (70%) and test (30%) sets 
+# Use set.seed for reproducibility
+#-------------------------------------------
+set.seed(123)
+split_df<-sample(nrow(df_subset_data), 2/3 * nrow(df_subset_data))
+
+df_svm_train <- df_subset_data[split_df, ]
+df_svm_test  <- df_subset_data[-split_df, ]
+
+#Task for training data
+task_svm<-makeClassifTask(id = "Tinnitus_svm", 
+                           data = data.frame(df_svm_train), 
+                           target = "sozk_soz01_male")
+
+#Task for test data
+task_svm.test<-makeClassifTask(id = "Tinnitus_svm", 
+                           data = data.frame(df_svm_test), 
+                           target = "sozk_soz01_male")
+#Repeated cross validation
+#-------------------------
+cv.folds <- makeResampleDesc("CV", iters = 3)
+
+# Define model tuning algorithm ~ Random tune algorithm
+#------------------------------------------------------
+random.tune <- makeTuneControlRandom(maxit = 5)
+
+#Constructing a learner with ranger classifier
+#---------------------------------------------
+lrn.svm<-makeFilterWrapper("classif.svm")
+
+#Get parameter set of the learner
+#--------------------------------
+getParamSet(lrn.svm)
+
+# Define parameters of model and search grid ~ !!!! MODEL SPECIFIC !!!!
+#----------------------------------------------------------------------
+model.params.svm <- makeParamSet(makeIntegerParam("fw.perc", lower = 0, upper = 1),
+                                 makeDiscreteParam("type", values = "C-classification"),
+                                 makeNumericParam("cost", lower = 0, upper = 5),
+                                 makeDiscreteParam("kernel", values = c("linear","polynomial","radial","sigmoid")),
+                                 makeNumericParam("gamma", lower = 0, upper = 5))
+
+#makeIntegerParam("degree", lower = 1, upper = 6))
+tune.svm<-tuneParams( learner    = lrn.svm,
+                      task       = task_svm,
+                      resampling = cv.folds,
+                      par.set    = model.params.svm,
+                      control    = random.tune )
+
+lrn_svm.g<-setHyperPars(makeLearner(("classif.svm"), par.vals = list(type       = tune.svm$x$type,
+                                                                     cost       = tune.svm$x$cost,
+                                                                     kernel     = tune.svm$x$kernel,
+                                                                     gamma      = tune.svm$x$gamma),
+                                   predict.type = "response"))
+
+
+                             
+mod.svm<-mlr::train(lrn_svm.g,task_svm)
+
+task.pred.svm = predict(mod.svm, task = task_svm.test)
+performance(task.pred.svm, measures = list(fpr, fnr, mmce))
+
+r = calculateROCMeasures(task.pred.svm)
+r
+
+X = df_svm_test[which(names(df_svm_test) != "sozk_soz01_male")]
+y= df_svm_test$sozk_soz01_male
+
+predictor.svm = Predictor$new(mod.svm, data = X, y = y)
+#predictor.svm$predict(df_male_test)
+
+imp.svm = FeatureImp$new(predictor.svm, loss = "ce")
+plot(imp.svm)
+imp.svm$results
+df.imp.svm<-data.frame(imp.svm$results)
+df.imp.svm<-df.imp.svm[order(-df.imp.svm$importance),]
+
+#interaction
+#interact.ridge = Interaction$new(mod.ridge)
+#plot(interact.ridge)
+
+#df.imp.ridge<-data.frame(imp.ridge$results)
+#df.imp.ridge<-df.imp.ridge[order(-df.imp.ridge$importance),]
+
+
+#View(imp.svm$results)
+
+#PDP
+pdp.obj1 = Partial$new(predictor.svm, feature = "tq_tin51")
+plot(pdp.obj1)
+
+pdp.obj2 = Partial$new(predictor.svm, feature = "tlq_tlq02_1")
+plot(pdp.obj2)
+
+pdp.obj3 = Partial$new(predictor.svm, feature = "adsl_adsl04")
+plot(pdp.obj3)
+
+pdp.obj4 = Partial$new(predictor.svm, feature = "tq_tin10")
+plot(pdp.obj4)
+
+pdp.obj5 = Partial$new(predictor.svm, feature = "tq_tin28")
+plot(pdp.obj5)
+
+pdp.obj6 = Partial$new(predictor.svm, feature = "sozk_soz18_angest")
+plot(pdp.obj6)
+
+pdp.obj7 = Partial$new(predictor.svm, feature = "tq_tin09")
+plot(pdp.obj7)
+
+pdp.obj8 = Partial$new(predictor.svm, feature = "tq_tin15")
+plot(pdp.obj8)
+
+pdp.obj9 = Partial$new(predictor.svm, feature = "tq_tin30")
+plot(pdp.obj9)
+
+pdp.obj10 = Partial$new(predictor.svm, feature = "tq_tin11")
+plot(pdp.obj10)
+
+pdp.obj11 = Partial$new(predictor.svm, feature = "tq_tin47")
+plot(pdp.obj11)
+
+df_res<-data.frame(imp.svm$results)
+
+dd<-df_res %>% 
+  mutate(newc = 90*importance)
+
+dd<-dd[order(-dd$newc),]
+
+dd$group = dd %>% group_indices(importance)
+dd$group<-as.factor(dd$group)
+
+dd = dd %>% arrange(group, newc)
+data<-dd
+
+# Set a number of 'empty bar' to add at the end of each group
+empty_bar <- 1
+to_add <- data.frame( matrix(NA, empty_bar*nlevels(data$group), ncol(data)) )
+colnames(to_add) <- colnames(data)
+to_add$group <- rep(levels(data$group), each=empty_bar)
+data <- rbind(data, to_add)
+data <- data %>% arrange(group)
+data$id <- seq(1, nrow(data))
+
+# Get the name and the y position of each label
+label_data <- data
+number_of_bar <- nrow(label_data)
+angle <- 90 - 360 * (label_data$id-0.5) /number_of_bar     # I substract 0.5 because the letter must have the angle of the center of the bars. Not extreme right(1) or extreme left (0)
+label_data$hjust <- ifelse( angle < -90, 1, 0)
+label_data$angle <- ifelse(angle < -90, angle+180, angle)
+
+# prepare a data frame for base lines
+base_data <- data %>% 
+  group_by(group) %>% 
+  summarize(start=min(id), end=max(id) - empty_bar) %>% 
+  rowwise() %>% 
+  mutate(title=mean(c(start, end)))
+
+# prepare a data frame for grid (scales)
+grid_data <- base_data
+grid_data$end <- grid_data$end[ c( nrow(grid_data), 1:nrow(grid_data)-1)] + 1
+grid_data$start <- grid_data$start - 1
+grid_data <- grid_data[-1,]
+
+# Make the plot
+p <- ggplot(data, aes(x=as.factor(id), y=newc, fill=group)) +       # Note that id is a factor. If x is numeric, there is some space between the first bar
+  
+  geom_bar(aes(x=as.factor(id), y=newc, fill=group), stat="identity", alpha=0.5) +
+  
+  # Add a val=100/75/50/25 lines. I do it at the beginning to make sur barplots are OVER it.
+  geom_segment(data=grid_data, aes(x = end, y = 80, xend = start, yend = 80), colour = "grey", alpha=1, size=0.1 , inherit.aes = FALSE ) +
+  geom_segment(data=grid_data, aes(x = end, y = 60, xend = start, yend = 60), colour = "grey", alpha=1, size=0.1 , inherit.aes = FALSE ) +
+  geom_segment(data=grid_data, aes(x = end, y = 40, xend = start, yend = 40), colour = "grey", alpha=1, size=0.1 , inherit.aes = FALSE ) +
+  geom_segment(data=grid_data, aes(x = end, y = 20, xend = start, yend = 20), colour = "grey", alpha=1, size=0.1 , inherit.aes = FALSE ) +
+  
+  # Add text showing the value of each 100/75/50/25 lines
+  #annotate("text", x = rep(max(data$id),4), y = c(20, 40, 60, 80), label = c("20", "40", #"60", "80") , color="grey", size=3 , angle=0, fontface="bold", hjust=1) +
+  
+  geom_bar(aes(x=as.factor(id), y=newc, fill=group), stat="identity", alpha=0.5) +
+  ylim(-70,150) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+    plot.margin = unit(rep(-1,4), "cm") 
+  ) +
+  coord_polar() + 
+  geom_text(data=label_data, aes(x=id, y=newc+10, label=feature, hjust=hjust), color="black", fontface="bold",alpha=0.6, size=2.5, angle= label_data$angle, inherit.aes = FALSE ) 
+  
+  # Add base line information
+  #geom_segment(data=base_data, aes(x = start, y = -5, xend = end, yend = -5), colour = #"black", alpha=0.8, size=0.6 , inherit.aes = FALSE )  +
+ # geom_text(data=base_data, aes(x = title, y = -18, label=group), hjust=1, colour = #"black", alpha=0.8, size=4, fontface="bold", inherit.aes = FALSE)
+
+p
+```
+
+Partial Least Squares
+
+```{r}
+# Create training (70%) and test (30%) sets 
+# Use set.seed for reproducibility
+#-------------------------------------------
+set.seed(123)
+split_df<-sample(nrow(df_subset_data), 2/3 * nrow(df_subset_data))
+
+df.pls.train <- df_subset_data[split_df, ]
+df.pls.test  <- df_subset_data[-split_df, ]
+
+#Task for training data
+#----------------------
+task_pls.train<-  makeClassifTask(id = "Tinnitus_gender", 
+                                 data = data.frame(df.pls.train), 
+                                 target = "sozk_soz01_male")
+
+#Task for test data
+#----------------------
+task_pls.test<-  makeClassifTask(id = "Tinnitus_gender1", 
+                                data = data.frame(df.pls.test), 
+                                target = "sozk_soz01_male")
+
+#Repeated cross validation
+#-------------------------
+cv.folds <- makeResampleDesc("CV", iters = 3)
+
+# Define model tuning algorithm ~ Random tune algorithm
+#------------------------------------------------------
+random.tune <- makeTuneControlRandom(maxit = 5)
+
+#Constructing a learner with ranger classifier
+#---------------------------------------------
+lrn.pls.g<-makeLearner("classif.plsdaCaret")
+
+#Get parameter set of the learner
+#--------------------------------
+getParamSet(lrn.pls.g)
+
+# Define parameters of model and search grid ~ !!!! MODEL SPECIFIC !!!!
+#----------------------------------------------------------------------
+model.params.pls.g <- makeParamSet(makeIntegerParam("ncomp", lower = 1, upper = 5),
+                                   makeDiscreteParam("probMethod", values = c("softmax","Bayes")))
+#Tuning parameters
+#-----------------
+tune.pls.g<-tuneParams(learner    = "classif.plsdaCaret",
+                      task       = task_pls.train,
+                      resampling = cv.folds,
+                      control    = random.tune,
+                      par.set    = model.params.pls.g )
+
+#Constructing a learner with ranger classifier with tuned hyperparameters
+#------------------------------------------------------------------------
+lrn_pls.g<-setHyperPars(makeLearner(("classif.plsdaCaret"), par.vals = list(ncomp      = tune.pls.g$x$ncomp,
+                                                                            probMethod = tune.pls.g$x$probMetho),
+                                   predict.type = "response"))
+
+
+
+mod.pls.g = mlr::train(lrn.pls.g, task_pls.train)
+
+task.pred.pls = predict(mod.pls.g, task = task_pls.test)
+performance(task.pred.pls, measures = list(fpr, fnr, mmce))
+
+r = calculateROCMeasures(task.pred.pls)
+r
+
+X = df.pls.test[-which(names(df.pls.test) == "sozk_soz01_male")]
+y = df.pls.test$sozk_soz01_male
+predictor.pls = Predictor$new(mod.pls.g, data = X, y = y, type = "class") 
+
+# For some models we have to specify additional arguments for the predict function
+imp.pls = FeatureImp$new(predictor.pls, loss = "ce")
+plot(imp.pls)
+
+View(imp.pls$results)
+
+#PDP
+pdp.obj1 = Partial$new(predictor.pls, feature = "tq_pb")
+plot(pdp.obj1)
+
+pdp.obj2 = Partial$new(predictor.pls, feature = "psq_anspan")
+plot(pdp.obj2)
+
+pdp.obj3 = Partial$new(predictor.pls, feature = "psq_stress02")
+plot(pdp.obj3)
+
+pdp.obj4 = Partial$new(predictor.pls, feature = "adsl_adsl12")
+plot(pdp.obj4)
+
+pdp.obj5 = Partial$new(predictor.pls, feature = "tq_tin23")
+plot(pdp.obj5)
+
+pdp.obj6 = Partial$new(predictor.pls, feature = "tq_em")
+plot(pdp.obj6)
+
+pdp.obj7 = Partial$new(predictor.pls, feature = "sf8_timestamp")
+plot(pdp.obj7)
+
+pdp.obj8 = Partial$new(predictor.pls, feature = "sozk_soz02_german")
+plot(pdp.obj8)
+
+pdp.obj9 = Partial$new(predictor.pls, feature = "sozk_soz05_partner")
+plot(pdp.obj9)
+
+pdp.obj10 = Partial$new(predictor.pls, feature = "psq_stress14")
+plot(pdp.obj10)
+
+pdp.obj11 = Partial$new(predictor.pls, feature = "psq_stress16")
+plot(pdp.obj11)
+
+df_pdp<-data.frame(imp.pls$results)
+df_pdp<-df_pdp[order(-df_pdp$importance),]
+df_pdp<-df_pdp[1:15,]
+
+
+df_res<-data.frame(imp.rf$results)
+
+dd<-df_res %>% 
+  mutate(newc = 90*importance)
+
+dd<-dd[order(-dd$newc),]
+
+dd$group = dd %>% group_indices(importance)
+dd$group<-as.factor(dd$group)
+
+dd = dd %>% arrange(group, newc)
+data<-dd
+
+# Set a number of 'empty bar' to add at the end of each group
+empty_bar <- 1
+to_add <- data.frame( matrix(NA, empty_bar*nlevels(data$group), ncol(data)) )
+colnames(to_add) <- colnames(data)
+to_add$group <- rep(levels(data$group), each=empty_bar)
+data <- rbind(data, to_add)
+data <- data %>% arrange(group)
+data$id <- seq(1, nrow(data))
+
+# Get the name and the y position of each label
+label_data <- data
+number_of_bar <- nrow(label_data)
+angle <- 90 - 360 * (label_data$id-0.5) /number_of_bar     # I substract 0.5 because the letter must have the angle of the center of the bars. Not extreme right(1) or extreme left (0)
+label_data$hjust <- ifelse( angle < -90, 1, 0)
+label_data$angle <- ifelse(angle < -90, angle+180, angle)
+
+# prepare a data frame for base lines
+base_data <- data %>% 
+  group_by(group) %>% 
+  summarize(start=min(id), end=max(id) - empty_bar) %>% 
+  rowwise() %>% 
+  mutate(title=mean(c(start, end)))
+
+# prepare a data frame for grid (scales)
+grid_data <- base_data
+grid_data$end <- grid_data$end[ c( nrow(grid_data), 1:nrow(grid_data)-1)] + 1
+grid_data$start <- grid_data$start - 1
+grid_data <- grid_data[-1,]
+
+# Make the plot
+p <- ggplot(data, aes(x=as.factor(id), y=newc, fill=group)) +       # Note that id is a factor. If x is numeric, there is some space between the first bar
+  
+  geom_bar(aes(x=as.factor(id), y=newc, fill=group), stat="identity", alpha=0.5) +
+  
+  # Add a val=100/75/50/25 lines. I do it at the beginning to make sur barplots are OVER it.
+  geom_segment(data=grid_data, aes(x = end, y = 80, xend = start, yend = 80), colour = "grey", alpha=1, size=0.1 , inherit.aes = FALSE ) +
+  geom_segment(data=grid_data, aes(x = end, y = 60, xend = start, yend = 60), colour = "grey", alpha=1, size=0.1 , inherit.aes = FALSE ) +
+  geom_segment(data=grid_data, aes(x = end, y = 40, xend = start, yend = 40), colour = "grey", alpha=1, size=0.1 , inherit.aes = FALSE ) +
+  geom_segment(data=grid_data, aes(x = end, y = 20, xend = start, yend = 20), colour = "grey", alpha=1, size=0.1 , inherit.aes = FALSE ) +
+  
+  # Add text showing the value of each 100/75/50/25 lines
+  #annotate("text", x = rep(max(data$id),4), y = c(20, 40, 60, 80), label = c("20", "40", #"60", "80") , color="grey", size=3 , angle=0, fontface="bold", hjust=1) +
+  
+  geom_bar(aes(x=as.factor(id), y=newc, fill=group), stat="identity", alpha=0.5) +
+  ylim(-70,150) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+    plot.margin = unit(rep(-1,4), "cm") 
+  ) +
+  coord_polar() + 
+  geom_text(data=label_data, aes(x=id, y=newc+10, label=feature, hjust=hjust), color="black", fontface="bold",alpha=0.6, size=2.5, angle= label_data$angle, inherit.aes = FALSE ) 
+  
+  # Add base line information
+  #geom_segment(data=base_data, aes(x = start, y = -5, xend = end, yend = -5), colour = #"black", alpha=0.8, size=0.6 , inherit.aes = FALSE )  +
+ # geom_text(data=base_data, aes(x = title, y = -18, label=group), hjust=1, colour = #"black", alpha=0.8, size=4, fontface="bold", inherit.aes = FALSE)
+
+p
+
+
+
+
+df.imp.pls<-data.frame(imp.pls$results)
+
+predictor.pls$prediction.function(df.pls.test)
+
+
+```
